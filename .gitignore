@@ -1,0 +1,31 @@
+# Python environments and generated files
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# JavaScript dependencies and build output
+node_modules/
+.next/
+out/
+coverage/
+
+# Local configuration (keep placeholder examples)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Private documents and local application data
+data/
+uploads/
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs and editor/OS files
+*.log
+.DS_Store
+Thumbs.db
+.idea/
