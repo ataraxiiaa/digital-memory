@@ -1,16 +1,8 @@
 """Application entry point for the first backend checkpoint."""
 
-from typing import Literal
-
 from fastapi import FastAPI
-from pydantic import BaseModel
 
-
-class HealthResponse(BaseModel):
-    """Liveness only; storage and external services are not checked."""
-
-    status: Literal["ok"]
-    service: Literal["digital-memory-api"]
+from backend.schemas.health import HealthResponse
 
 
 app = FastAPI(

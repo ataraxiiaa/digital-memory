@@ -47,6 +47,8 @@ pygments==2.21.0
     # via pytest
 pytest==9.2.0
     # via -r src/backend/requirements.in
+python-dotenv==1.2.4
+    # via -r src/backend/requirements.in
 starlette==1.10.0
     # via fastapi
 typing-extensions==4.16.0
