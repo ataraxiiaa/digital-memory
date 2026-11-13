@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { pdfFixture } from "./pdf-fixture.mjs";
 
 const headers = { Authorization: "Bearer fixture-access-token" };
 
@@ -28,4 +29,14 @@ test("real proxy maps rejected tokens and invalid uploads safely", async ({ requ
   expect(wrongType.status()).toBe(415);
   const invalidId = await request.get("/api/documents/not-an-id", { headers });
   expect(invalidId.status()).toBe(404);
+});
+
+test("PDF file proxy preserves original bytes and requires credentials", async ({ request }) => {
+  const path = "/api/documents/00000000-0000-0000-0000-000000000010/file";
+  expect((await request.get(path)).status()).toBe(401);
+  const response = await request.get(path, { headers });
+  expect(response.status()).toBe(200);
+  expect(response.headers()["content-type"]).toBe("application/pdf");
+  expect(response.headers()["cache-control"]).toBe("no-store");
+  expect(await response.body()).toEqual(pdfFixture());
 });

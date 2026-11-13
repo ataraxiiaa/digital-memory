@@ -76,6 +76,6 @@ Continue in small verified checkpoints. The frontend remains independent until t
 
 The bundled synthetic notes and downloaded book fixtures have been removed. Documents will be explicitly added by their users through the upcoming ingestion flow. Account creation is available at `/sign-up`, including email-confirmation handling and a link back to sign-in.
 
-Authenticated PDF storage is available through `POST /documents/upload` and the frontend PDF picker. It accepts PDFs up to 30 MiB, stores originals privately, and saves linked metadata with `status: uploaded`. The frontend shows transfer progress, saving states, errors, and automatic list refresh. Original PDF viewing, text extraction, and OCR remain upcoming. See the backend README for validation, limits, policies, and failure cleanup.
+Authenticated PDF storage is available through `POST /documents/upload` and the frontend PDF picker. It accepts PDFs up to 30 MiB, stores originals privately, and saves linked metadata with `status: uploaded`. The frontend shows transfer progress, saving states, errors, and automatic list refresh. Original PDFs can now be viewed in-app or opened/downloaded through authenticated routes. Text extraction and OCR remain upcoming. See the backend README for validation, limits, policies, and failure cleanup.
 
 Use synthetic documents during development. Keep secrets in ignored local environment files and private imports under ignored `data/` or `uploads/` directories. Never commit real personal documents or credentials.

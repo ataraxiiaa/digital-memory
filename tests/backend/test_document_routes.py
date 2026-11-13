@@ -26,12 +26,15 @@ HEADERS = {"Authorization": "Bearer token-a"}
 @pytest.fixture
 def api():
     calls = []
-    state = {"storage_status": 200, "auth_status": 200, "rows": [ROW]}
+    state = {"storage_status": 200, "auth_status": 200, "rows": [ROW], "file_status": 200, "file_bytes": b"%PDF-test-original"}
 
     def handle(request):
         calls.append(request)
         if request.url.path == "/auth/v1/user":
             return httpx.Response(state["auth_status"], json={"id": "00000000-0000-0000-0000-000000000001", "role": "authenticated"})
+        if request.url.path.startswith("/storage/v1/object/authenticated/documents/"):
+            assert request.headers["authorization"] == "Bearer token-a"
+            return httpx.Response(state["file_status"], content=state["file_bytes"], headers={"Content-Type": "application/pdf"})
         assert request.url.path == "/rest/v1/documents"
         if state["storage_status"] != 200:
             return httpx.Response(state["storage_status"], json={"message": "private provider detail"})
@@ -161,3 +164,49 @@ def test_openapi_marks_all_document_operations_authenticated(api):
     paths = client.get("/openapi.json").json()["paths"]
     for path, method in [("/documents", "get"), ("/documents", "post"), ("/documents/{document_id}", "get")]:
         assert paths[path][method]["security"] == [{"HTTPBearer": []}]
+
+
+def pdf_row():
+    return {**ROW, "storage_path": f"00000000-0000-0000-0000-000000000001/{DOCUMENT_ID}/original.pdf", "original_filename": "report.pdf", "status": "uploaded"}
+
+
+def test_view_pdf_returns_exact_private_bytes_with_inline_headers(api):
+    client, calls, state = api
+    state["rows"] = [pdf_row()]
+    response = client.get(f"/documents/{DOCUMENT_ID}/file", headers=HEADERS)
+    assert response.status_code == 200
+    assert response.content == state["file_bytes"]
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["content-disposition"].startswith("inline;")
+    assert len(calls) == 3
+
+
+@pytest.mark.parametrize("rows", [[], [ROW], [{**pdf_row(), "storage_path": "someone-else/original.pdf"}]])
+def test_missing_text_only_or_foreign_path_does_not_fetch_storage(api, rows):
+    client, calls, state = api
+    state["rows"] = rows
+    assert client.get(f"/documents/{DOCUMENT_ID}/file", headers=HEADERS).status_code == 404
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("upstream,expected", [(400, 404), (401, 401), (403, 404), (404, 404), (500, 503), (302, 503)])
+def test_pdf_storage_errors_do_not_leak_private_responses(api, upstream, expected):
+    client, _, state = api
+    state.update(rows=[pdf_row()], file_status=upstream, file_bytes=b"private provider data")
+    response = client.get(f"/documents/{DOCUMENT_ID}/file", headers=HEADERS)
+    assert response.status_code == expected
+    assert "private provider data" not in response.text
+
+
+def test_non_pdf_storage_response_is_rejected(api):
+    client, _, state = api
+    state.update(rows=[pdf_row()], file_bytes=b"not a PDF")
+    assert client.get(f"/documents/{DOCUMENT_ID}/file", headers=HEADERS).status_code == 502
+
+
+def test_pdf_requires_auth_before_storage(api):
+    client, calls, _ = api
+    assert client.get(f"/documents/{DOCUMENT_ID}/file").status_code == 401
+    assert calls == []

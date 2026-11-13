@@ -122,7 +122,7 @@ Migration `202611130002_pdf_uploads.sql` has been applied to the configured proj
 
 Storage and Postgres are separate services, so saving both is not a single atomic transaction. If metadata saving fails or times out, the endpoint attempts to remove the uploaded object. A policy refuses removal when a document row already committed, preserving the original after an ambiguous timeout. Cleanup failure emits a sanitized operational warning; administrative reconciliation may be needed. On a 503 after upload, refresh the document list before retrying, because a create is not idempotent.
 
-Errors: 401 for missing/invalid authentication, 413 for too many file bytes, 415 for unsupported file type, 422 for invalid PDF or form fields, and 503 for storage/database failures. The application byte limit applies when reading the parsed uploaded file; also configure a multipart request-size limit slightly above 30 MiB at the deployment ingress, because multipart parsing/spooling happens before the route runs. The frontend now includes upload and document-list controls through Next.js proxies. A PDF download endpoint is not implemented.
+Errors: 401 for missing/invalid authentication, 413 for too many file bytes, 415 for unsupported file type, 422 for invalid PDF or form fields, and 503 for storage/database failures. The application byte limit applies when reading the parsed uploaded file; also configure a multipart request-size limit slightly above 30 MiB at the deployment ingress, because multipart parsing/spooling happens before the route runs. The frontend now includes upload and document-list controls through Next.js proxies. The authenticated original-file endpoint `GET /documents/{document_id}/file` is now implemented for viewing/download.
 
 Tests in `tests/backend/test_pdf_uploads.py` validate in-memory PDFs and mock cloud upload/metadata/cleanup requests. No real documents or accounts are created by the tests. Live user-token upload and two-user file access checks remain pending.
 
@@ -193,3 +193,9 @@ No credentials or configuration files are required. The server binds to the loca
 ```powershell
 uv pip compile src/backend/requirements.in --python .\.venv\Scripts\python.exe -o src/backend/requirements.txt
 ```
+
+## Original PDF viewing endpoint
+
+`GET /documents/{document_id}/file` requires the same bearer authentication as other document routes. It reads the owned document row before accessing private Storage and requires the canonical `<user-id>/<document-id>/original.pdf` path. Missing, hidden, text-only, or mismatched paths return 404 without fetching the object. Storage authentication expiry returns 401, inaccessible/missing objects return 404, and service failures return 503. Oversized or non-PDF stored bytes return 502.
+
+The successful response returns original bytes as `application/pdf`, with inline Content-Disposition, UTF-8 filename encoding, no-store, and nosniff headers. No signed or public URL is issued. The backend buffers at most 30 MiB before responding; it does not implement range requests. The frontend fetches a full file through its server proxy before displaying a temporary browser-local URL. No migration or text extraction is needed for viewing. Tests mock Storage and verify byte preservation, ownership/path checks, content headers, authentication, and failure handling.

@@ -1,5 +1,6 @@
 // Local-only upstream fixture for exercising real Next.js proxy routes.
 import { createServer } from "node:http";
+import { pdfFixture } from "./pdf-fixture.mjs";
 
 const row = { id: "00000000-0000-0000-0000-000000000010", title: "Proxy upload", collection: "Unfiled", document_date: null, created_at: "2026-11-13T12:00:00Z", status: "uploaded", content: "" };
 createServer(async (request, response) => {
@@ -16,6 +17,10 @@ createServer(async (request, response) => {
     const body = Buffer.concat(chunks).toString();
     if (!request.headers["content-type"]?.includes("boundary=") || !body.includes("proxy-fixture.pdf") || !body.includes("%PDF-proxy-body")) return send(422, { detail: "Multipart body was not forwarded intact" });
     return send(201, row);
+  }
+  if (url.pathname === `/documents/${row.id}/file`) {
+    response.writeHead(200, { "Content-Type": "application/pdf", "Content-Disposition": "inline; filename=preview.pdf" });
+    return response.end(pdfFixture());
   }
   if (url.pathname === `/documents/${row.id}`) return send(200, row);
   return send(404, { detail: "Not found" });

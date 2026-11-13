@@ -47,7 +47,7 @@ After signing in, Overview and Documents show a PDF picker and the user's live d
 
 Browser validation rejects wrong file types, empty files, and oversized PDFs before upload. FastAPI performs authoritative PDF validation. Progress measures transfer from the browser to Next.js; at 100% the UI switches to saving/validation while FastAPI and Supabase finish. Success clears the form and refreshes the first list page. Failures preserve the selection. After an uncertain upload outcome, refresh the list before retrying to avoid duplicates.
 
-The library fetches owned metadata in pages of 20, with loading, empty, error/retry, and previous/next states. Select a document for metadata or existing text in an accessible dialog. Uploaded PDFs show **Uploaded · Text pending**. PDF viewing and extraction/OCR are not implemented. Timeline is a placeholder for future extracted events.
+The library fetches owned metadata in pages of 20, with loading, empty, error/retry, and previous/next states. Select a document for metadata or existing text in an accessible dialog. Uploaded PDFs show **Uploaded · Text pending**. Original PDF viewing is implemented; extraction/OCR is not. Timeline is a placeholder for future extracted events.
 
 Same-origin `/api/documents`, `/api/documents/upload`, and `/api/documents/[id]` routes forward the user's token to FastAPI without an admin key. The upload proxy streams multipart bytes, limits total bytes to 30 MiB plus 64 KiB of overhead, and waits up to 120 seconds. It never automatically retries a create. Production hosting must support these request sizes and durations; smaller platform caps can prevent large files reaching the app.
 
@@ -68,3 +68,11 @@ npm.cmd run test:e2e
 ```
 
 Tests under `tests/frontend/e2e/` cover authentication, signup, PDF selection/upload, list refresh, validation, failures, pagination, dialogs, and mobile layout. They use mock Supabase sessions and responses. Proxy tests send real multipart requests through Next.js to a local test upstream, verifying bytes and token propagation. No real accounts or Supabase files are created. Tests use port 3100 with isolated `.next-e2e/` output and a local upstream on port 3199. Screenshots are saved under ignored `test-results/`.
+
+## Private PDF viewing
+
+Select an uploaded PDF to open its details and embedded browser PDF viewer. FastAPI's authenticated `GET /documents/{id}/file` checks the document row and expected owner-specific file path, then downloads the original using the same user's token. Next.js streams those bytes through `/api/documents/[id]/file` without publishing a Storage URL. Responses are no-store.
+
+The browser fetches with the bearer token, creates a temporary local blob URL, and uses that URL in the PDF frame. Tokens are never placed in URLs. The URL is revoked when the viewer closes, changes document, or unmounts on sign-out. Open-in-new-tab and download links provide fallbacks for browsers without embedded PDF support. A downloaded or already-opened copy cannot be revoked by signing out.
+
+The original PDF is fetched in full (up to 30 MiB) before viewing. Native viewer controls provide pagination and zoom where supported. This is a browser-native viewer, not a custom PDF.js renderer. Headless browser tests verify authenticated fetching, binary forwarding, frame setup, fallback links, retry, and URL cleanup; they do not guarantee native PDF rendering on every browser. No page text is extracted or stored by this feature.

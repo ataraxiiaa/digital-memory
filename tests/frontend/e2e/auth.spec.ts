@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { pdfFixture } from "./pdf-fixture.mjs";
 
 async function fillSignup(page: Page, confirmation = "fictional-password") {
   await page.getByLabel("Email address").fill("alex@example.test");
@@ -10,6 +11,7 @@ async function fillSignup(page: Page, confirmation = "fictional-password") {
 const user = { id: "00000000-0000-0000-0000-000000000001", email: "alex@example.test", role: "authenticated", aud: "authenticated", app_metadata: {}, user_metadata: {}, created_at: "2026-11-13T10:00:00Z" };
 
 async function mockAuth(page: Page, options: { badPassword?: boolean; backendStatus?: number } = {}) {
+  await page.route("**/api/documents/*/file", route => route.fulfill({ contentType: "application/pdf", body: pdfFixture() }));
   await page.route("**/api/documents?*", route => route.fulfill({ json: [] }));
   await page.route("https://auth-fixture.supabase.co/auth/v1/**", async route => {
     if (route.request().url().includes("/logout")) { await route.fulfill({ status: 204 }); return; }
@@ -186,6 +188,9 @@ test("upload PDF refreshes the owned list and opens file metadata", async ({ pag
   await page.getByRole("button", { name: /Project notes.*Work/ }).click();
   await expect(page.getByRole("dialog")).toContainText("3 pages");
   await expect(page.getByRole("dialog")).toContainText("stored privately");
+  await expect(page.locator('iframe[title="PDF preview: notes.pdf"]')).toHaveAttribute("src", /^blob:/);
+  await expect(page.getByRole("link", { name: "Download PDF" })).toHaveAttribute("download", "notes.pdf");
+  await page.screenshot({ path: "test-results/pdf-viewer.png", fullPage: true });
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).not.toBeVisible();
   await page.screenshot({ path: "test-results/document-library.png", fullPage: true });
@@ -250,4 +255,34 @@ test("document proxy endpoints reject missing credentials", async ({ request }) 
   expect((await request.get("/api/documents")).status()).toBe(401);
   expect((await request.post("/api/documents/upload", { multipart: { file: { name: "a.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF") } } })).status()).toBe(401);
   expect((await request.get(`/api/documents/${documentRow.id}`)).status()).toBe(401);
+});
+
+test("PDF viewer supports retry and releases its temporary URL on close", async ({ page }) => {
+  await page.addInitScript(() => {
+    const original = URL.revokeObjectURL;
+    (window as unknown as { revoked: string[] }).revoked = [];
+    URL.revokeObjectURL = value => {
+      (window as unknown as { revoked: string[] }).revoked.push(value);
+      original.call(URL, value);
+    };
+  });
+  await mockAuth(page);
+  await page.route("**/api/documents?*", route => route.fulfill({ json: [documentRow] }));
+  await page.route(`**/api/documents/${documentRow.id}`, route => route.fulfill({ json: { ...documentRow, original_filename: "notes.pdf", page_count: 1, file_size_bytes: pdfFixture().length, content: "" } }));
+  let fail = true;
+  await page.route(`**/api/documents/${documentRow.id}/file`, async route => {
+    expect(route.request().headers()["authorization"]).toBe("Bearer fixture-access-token");
+    if (fail) await route.fulfill({ status: 503, json: { detail: "Unavailable" } });
+    else await route.fulfill({ contentType: "application/pdf", body: pdfFixture() });
+  });
+  await page.goto("/sign-in"); await signIn(page);
+  await page.getByRole("button", { name: /Project notes.*Work/ }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Couldn’t load this PDF" })).toBeVisible();
+  fail = false;
+  await page.getByRole("button", { name: "Retry PDF" }).click();
+  const iframe = page.locator('iframe[title="PDF preview: notes.pdf"]');
+  await expect(iframe).toHaveAttribute("src", /^blob:/);
+  const src = await iframe.getAttribute("src");
+  await page.getByRole("button", { name: "Close document" }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { revoked: string[] }).revoked)).toContain(src);
 });
