@@ -3,7 +3,7 @@
 We add one working layer at a time. Each checkpoint ends with a runnable result and checks before the next layer.
 
 1. **API foundation (implemented):** FastAPI application, `GET /health`, API documentation, and request-level tests.
-2. **Supabase document storage:** (2a) prepare the schema and storage adapter; (2b) connect the Supabase project, apply migrations, and verify ownership with two test users; (2c) add authenticated create/list/read API routes. The initial migration is applied and catalog checks passed; two-user isolation testing and routes remain pending.
+2. **Supabase document storage:** the migration is applied, catalog checks passed, and authenticated create/list/read API routes are implemented. Live two-user isolation testing remains pending.
 3. **Text ingestion:** allow users to add their own documents; handle long texts in passages, keeping original text and source positions. Define size limits and clear errors, preserve Unicode, and prevent silent truncation. No bundled document corpus remains.
 4. **Search and evidence:** search passages, paginate results, and return exact source references. Verify matches from the start, middle, and end of long files.
 5. **Frontend integration:** connect the existing library and source previews, add loading/error/empty states, and configure local browser access.
@@ -34,7 +34,7 @@ PostgreSQL stores the title, text, document date, collection, synthetic-data fla
 
 Ownership comes from `auth.uid()`, not a client-provided owner ID. Row-level security lets each authenticated user read and insert only their own rows. The adapter uses a publishable key plus a user token and rejects new secret keys. Do not replace it with a secret/service-role key, which would bypass these policies.
 
-The initial document migration has been applied to the configured Supabase project. Live database catalog checks verified all eight columns, the index, enabled RLS, both policy names, and the intended role permissions. Offline adapter tests use mocked HTTP responses and do **not** prove two-user RLS isolation; that remains pending. The adapter is not exposed through HTTP routes yet. Upload limits, passage splitting, original-file storage, and authentication wiring are still upcoming.
+The initial document migration has been applied to the configured Supabase project. Live database catalog checks verified all eight columns, the index, enabled RLS, both policy names, and the intended role permissions. Authenticated document routes now use the adapter. Offline tests do **not** prove two-user RLS isolation; that remains pending. Upload limits, passage splitting, and original-file storage are still upcoming.
 
 ### Apply migrations
 
@@ -68,7 +68,7 @@ After applying the migration and signing in a development user, run:
 
 Paste that user's access token at the hidden terminal prompt; do not put it in a command argument or commit it. This verifies the user through Supabase Auth and reads at most one document's metadata. It makes no writes. Cross-user isolation still needs the separate two-user test described above.
 
-`storage/connection.py` provides `open_document_store(access_token)`, which loads configuration and manages a user-scoped HTTP client for the adapter. It is ready for future authenticated routes. `/health` remains independent of Supabase so the API can still start without cloud configuration. Connection helpers use direct HTTPS with a 15-second diagnostic timeout and do not use environment proxies.
+`storage/connection.py` provides `open_document_store(access_token)` for standalone callers. HTTP document routes instead reuse the authentication dependency's request-scoped HTTP client and settings. `/health` remains independent of Supabase so the API can still start without cloud configuration. Connection helpers use direct HTTPS with a 15-second diagnostic timeout and do not use environment proxies.
 
 References: [Supabase API keys](https://supabase.com/docs/guides/getting-started/api-keys), [row-level security](https://supabase.com/docs/guides/database/postgres/row-level-security), and [database and Storage architecture](https://supabase.com/docs/guides/getting-started/the-supabase-way-to-build).
 
@@ -96,9 +96,61 @@ To try it, start the backend, open http://127.0.0.1:8000/docs, select **Authoriz
 | Missing configuration, timeout, provider rate limit, or provider failure | 503 |
 | Malformed user identity returned by the provider | 502 |
 
-Responses use `Cache-Control: no-store`. Errors omit credentials and upstream response bodies. Each request is validated remotely, so protected endpoints depend on Supabase Auth availability. `/health` and API docs stay public. The reusable `get_authenticated_session` dependency retains the verified user and a masked access token for future document routes; tokens must not be logged.
+Responses use `Cache-Control: no-store`. Errors omit credentials and upstream response bodies. Each request is validated remotely, so protected endpoints depend on Supabase Auth availability. `/health` and API docs stay public. The reusable `get_authenticated_session` dependency retains the verified user and a masked access token used by document routes; tokens must not be logged.
 
-Code is separated into `auth/dependencies.py` (token checks and validation), `auth/routes.py` (endpoint), and `schemas/auth.py` (response schema). Tests in `tests/backend/test_auth.py` mock Supabase for valid, expired/rejected, malformed, unavailable, and timeout scenarios. A successful mock test is not a live sign-in or a two-user RLS test. Frontend sign-in and document routes remain upcoming.
+Code is separated into `auth/dependencies.py` (token checks and validation), `auth/routes.py` (endpoint), and `schemas/auth.py` (response schema). Tests in `tests/backend/test_auth.py` mock Supabase for valid, expired/rejected, malformed, unavailable, and timeout scenarios. A successful mock test is not a live sign-in or a two-user RLS test. Frontend signup and sign-in are implemented; document UI integration remains upcoming.
+
+## Document API
+
+### PDF uploads
+
+`POST /documents/upload` now accepts an authenticated `multipart/form-data` request with:
+
+- `file` (required): PDF, up to **31,457,280 bytes (30 MiB)**, matching the current private `documents` bucket.
+- `title` (optional): defaults to the PDF filename without the extension.
+- `collection` (optional): defaults to `Unfiled`.
+
+Open `/docs`, authorize with a Supabase user's access token, expand this endpoint, and choose a PDF in **Try it out**. Do not manually set the multipart Content-Type; the client must generate its boundary.
+
+The endpoint checks the extension and supplied MIME type, reads the file with a byte limit, checks its PDF header, and opens its page tree with `pypdf`. Empty, damaged, encrypted/password-protected, and over-1,000-page files are rejected. Accepted MIME types are `application/pdf` and `application/octet-stream` for clients that do not identify PDFs correctly. Validating a PDF is not malware scanning or complete page rendering; parsing currently runs in a thread without hard CPU/memory isolation.
+
+The original bytes are stored without overwrite under `documents/<user-id>/<document-id>/original.pdf`. Filenames are metadata, not storage paths. The same user's token authorizes both Storage and database requests; no secret/service-role key is used. A document row stores the original filename, byte count, page count, and private storage path. A successful response is 201 with the document and a `Location` header.
+
+Uploaded PDFs have `status: "uploaded"` and empty `content`. This explicitly means **stored, not yet text-extracted**. Existing JSON text creates have `status: "ready"`. Scanned PDFs are accepted for storage, but OCR detection/extraction and page-level evidence have not been implemented. Uploading does not run a background worker or claim that the PDF is searchable.
+
+Migration `202611130002_pdf_uploads.sql` has been applied to the configured project. It adds PDF metadata and permits authenticated users to insert/read only their own Storage folder. Cleanup may delete unlinked objects in that folder; linked originals are protected from this cleanup policy. No update/overwrite policy is added. This policy assumes no other permissive Storage policies grant broader access; the live bucket had no policies before this migration.
+
+Storage and Postgres are separate services, so saving both is not a single atomic transaction. If metadata saving fails or times out, the endpoint attempts to remove the uploaded object. A policy refuses removal when a document row already committed, preserving the original after an ambiguous timeout. Cleanup failure emits a sanitized operational warning; administrative reconciliation may be needed. On a 503 after upload, refresh the document list before retrying, because a create is not idempotent.
+
+Errors: 401 for missing/invalid authentication, 413 for too many file bytes, 415 for unsupported file type, 422 for invalid PDF or form fields, and 503 for storage/database failures. The application byte limit applies when reading the parsed uploaded file; also configure a multipart request-size limit slightly above 30 MiB at the deployment ingress, because multipart parsing/spooling happens before the route runs. The frontend now includes upload and document-list controls through Next.js proxies. A PDF download endpoint is not implemented.
+
+Tests in `tests/backend/test_pdf_uploads.py` validate in-memory PDFs and mock cloud upload/metadata/cleanup requests. No real documents or accounts are created by the tests. Live user-token upload and two-user file access checks remain pending.
+
+All operations require `Authorization: Bearer <user access token>`. Open `/docs`, authorize with a signed-in user's access token, and use the Documents section.
+
+| Method and path | Result |
+| --- | --- |
+| `POST /documents` | Save text; returns full document with status 201 and a `Location` header. |
+| `GET /documents?limit=20&offset=0` | Return a JSON array of owned document metadata, ordered newest first with ID as a tie breaker. |
+| `GET /documents/{document_id}` | Return an owned document including its original text. |
+
+Example create body:
+
+```json
+{
+  "title": "My first note",
+  "content": "Original text.\n\nAnother passage.",
+  "document_date": "2026-11-13",
+  "collection": "Personal",
+  "synthetic": false
+}
+```
+
+Only `title` and `content` are required for JSON text creation. Defaults are a null document date, `Unfiled` collection, and `synthetic: false`. Do not send `owner_id`, `id`, or timestamps: additional fields are rejected. Supabase derives ownership from the same verified access token forwarded by FastAPI. Text and paragraph breaks are preserved. The JSON endpoints do not import files; PDF upload is a separate multipart endpoint above. Passage splitting, search, update, and document deletion are not implemented. The JSON text-create endpoint has no content-size cap yet.
+
+Lists omit full content and owner IDs, return `[]` when empty, and allow `limit` 1–100 and nonnegative `offset`. Invalid bodies, pagination, or UUIDs return 422. Missing/invalid authentication returns 401; a nonexistent or RLS-hidden document returns the same 404. Storage failures return a sanitized 503. Document responses, including validation errors, use `Cache-Control: no-store`. Avoid automatic retries of creates: duplicate submission currently creates separate documents.
+
+`routes/documents.py` contains routes and storage wiring. Tests in `tests/backend/test_document_routes.py` cover the HTTP contracts, token forwarding, input validation, pagination, missing/hidden rows, error handling, and lack of token sharing between requests. Live end-to-end tests with two real accounts remain pending; no users or documents are automatically seeded by these tests.
 
 ## Health request flow
 

@@ -1,6 +1,6 @@
 # Digital Memory frontend
 
-Next.js App Router with Supabase email/password sign-in, signup, and an empty personal workspace.
+Next.js App Router with Supabase sign-in/signup, private PDF upload, and an authenticated document library.
 
 ## Configure
 
@@ -39,7 +39,19 @@ If email confirmation is enabled, signup shows a check-email message without ope
 5. Only after verification does the UI display the empty personal workspace. A reload restores and rechecks the session. Backend failures show retry/sign-out controls; a rejected session is cleared locally.
 6. Sign out clears this browser's Supabase session. It does not sign out other devices. Previously issued access tokens can remain valid until expiration.
 
-The same-origin proxy avoids browser CORS configuration and sends no passwords or refresh tokens to FastAPI. Identity responses are not cached. Frontend gating controls navigation; authorization for actual private data must remain enforced in FastAPI and database RLS. The workspace includes no bundled documents. Original document storage APIs are still upcoming.
+The same-origin proxy avoids browser CORS configuration and sends no passwords or refresh tokens to FastAPI. Identity responses are not cached. Frontend gating controls navigation; authorization for private data remains enforced in FastAPI and database RLS. The workspace includes no bundled documents and loads the user's document API.
+
+## PDF upload and document library
+
+After signing in, Overview and Documents show a PDF picker and the user's live document list. Choose a PDF up to **30 MiB (31,457,280 bytes)**, edit its title if desired, optionally enter a collection, then select **Upload PDF**. The backend must be running with the PDF upload migration applied and the private Supabase `documents` bucket configured.
+
+Browser validation rejects wrong file types, empty files, and oversized PDFs before upload. FastAPI performs authoritative PDF validation. Progress measures transfer from the browser to Next.js; at 100% the UI switches to saving/validation while FastAPI and Supabase finish. Success clears the form and refreshes the first list page. Failures preserve the selection. After an uncertain upload outcome, refresh the list before retrying to avoid duplicates.
+
+The library fetches owned metadata in pages of 20, with loading, empty, error/retry, and previous/next states. Select a document for metadata or existing text in an accessible dialog. Uploaded PDFs show **Uploaded · Text pending**. PDF viewing and extraction/OCR are not implemented. Timeline is a placeholder for future extracted events.
+
+Same-origin `/api/documents`, `/api/documents/upload`, and `/api/documents/[id]` routes forward the user's token to FastAPI without an admin key. The upload proxy streams multipart bytes, limits total bytes to 30 MiB plus 64 KiB of overhead, and waits up to 120 seconds. It never automatically retries a create. Production hosting must support these request sizes and durations; smaller platform caps can prevent large files reaching the app.
+
+UI code lives in `components/document-library.tsx`, proxy code in `lib/document-proxy.ts`, and styles in `app/documents.css`. Session changes unmount the protected workspace and abort in-flight UI requests. Document data is not persisted in browser storage.
 
 Code lives in `components/auth-provider.tsx`, `components/auth-screen.tsx`, `components/auth-gate.tsx`, `app/sign-in/page.tsx`, `app/sign-up/page.tsx`, `lib/supabase.ts`, and `app/api/auth/me/route.ts`. `components/account-menu.tsx` displays the real signed-in account.
 
@@ -55,4 +67,4 @@ npx.cmd playwright install chromium --only-shell
 npm.cmd run test:e2e
 ```
 
-Browser tests under `tests/frontend/e2e/` use mock Supabase sessions and API responses. They cover redirects, sign-in errors, verification, reload persistence, sign-out, expired/rejected sessions, outage recovery, and mobile layout. They do not create real accounts or prove a successful live sign-in. Tests run a separate development server on port 3100 using `.next-e2e/` and fake public configuration so the existing dev server can keep running. Screenshots are written to ignored `test-results/`.
+Tests under `tests/frontend/e2e/` cover authentication, signup, PDF selection/upload, list refresh, validation, failures, pagination, dialogs, and mobile layout. They use mock Supabase sessions and responses. Proxy tests send real multipart requests through Next.js to a local test upstream, verifying bytes and token propagation. No real accounts or Supabase files are created. Tests use port 3100 with isolated `.next-e2e/` output and a local upstream on port 3199. Screenshots are saved under ignored `test-results/`.

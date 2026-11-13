@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AuthGate } from "../components/auth-gate";
 import { AccountMenu } from "../components/account-menu";
 import { useAuth } from "../components/auth-provider";
+import { DocumentLibrary } from "../components/document-library";
 
 const views = ["Overview", "Documents", "Timeline"] as const;
 
@@ -25,7 +26,7 @@ function Workspace() {
     </aside>
     <div className="main-shell"><header className="topbar"><span>Workspace <span className="slash">/</span><strong>{view}</strong></span><AccountMenu /></header>
       <main><div className="page-heading"><div><p className="eyebrow">YOUR PERSONAL KNOWLEDGE SPACE</p><h1>{view === "Overview" ? "Make room for remembering." : view === "Documents" ? "Your library, in one place." : "One moment leads to another."}</h1><p className="subtitle">A fresh space for your notes, ideas, and moments.</p></div></div>
-        <section className="empty" aria-label="Empty workspace"><h2>{view === "Timeline" ? "Your story starts here." : "A fresh start."}</h2><p>No example documents are included in your workspace.</p><p>Document uploads and your personal library are coming next.</p></section>
+        {view === "Timeline" ? <section className="empty"><h2>Your story starts here.</h2><p>Timeline extraction is coming next. Add PDFs from Overview or Documents.</p></section> : <DocumentLibrary />}
         <footer className="main-footer"><span>Every memory starts with a source.</span><span>Your workspace</span></footer>
       </main>
     </div>

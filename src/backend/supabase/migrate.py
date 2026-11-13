@@ -31,7 +31,7 @@ def transaction_body(sql: str) -> str:
 
 def verify_documents(connection) -> None:
     columns = connection.execute("select column_name from information_schema.columns where table_schema = 'public' and table_name = 'documents'").fetchall()
-    expected = {"id", "owner_id", "title", "content", "document_date", "collection", "synthetic", "created_at"}
+    expected = {"id", "owner_id", "title", "content", "document_date", "collection", "synthetic", "created_at", "status", "storage_path", "original_filename", "file_size_bytes", "page_count"}
     if {row[0] for row in columns} != expected:
         raise ValueError("Document table columns do not match the migration")
     rls = connection.execute("select relrowsecurity from pg_class where oid = 'public.documents'::regclass").fetchone()
@@ -49,6 +49,13 @@ def verify_documents(connection) -> None:
     """).fetchone()
     if permissions != (False, True, True, False, False, False, True):
         raise ValueError("Document permissions or index did not pass verification")
+    storage_policies = connection.execute("select policyname from pg_policies where schemaname = 'storage' and tablename = 'objects'").fetchall()
+    required_policies = {"documents_files_insert_own", "documents_files_read_own", "documents_files_cleanup_own"}
+    if not required_policies.issubset({row[0] for row in storage_policies}):
+        raise ValueError("PDF Storage ownership policies are missing")
+    bucket = connection.execute("select public from storage.buckets where id = 'documents'").fetchone()
+    if bucket != (False,):
+        raise ValueError("Documents bucket must exist and remain private")
 
 
 def apply_migrations(connection) -> list[str]:

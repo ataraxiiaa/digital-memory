@@ -10,6 +10,7 @@ async function fillSignup(page: Page, confirmation = "fictional-password") {
 const user = { id: "00000000-0000-0000-0000-000000000001", email: "alex@example.test", role: "authenticated", aud: "authenticated", app_metadata: {}, user_metadata: {}, created_at: "2026-11-13T10:00:00Z" };
 
 async function mockAuth(page: Page, options: { badPassword?: boolean; backendStatus?: number } = {}) {
+  await page.route("**/api/documents?*", route => route.fulfill({ json: [] }));
   await page.route("https://auth-fixture.supabase.co/auth/v1/**", async route => {
     if (route.request().url().includes("/logout")) { await route.fulfill({ status: 204 }); return; }
     if (options.badPassword) { await route.fulfill({ status: 400, json: { error_code: "invalid_credentials", msg: "Invalid login credentials" } }); return; }
@@ -159,3 +160,94 @@ for (const scenario of [
     await expect(page.getByText("private provider detail")).toHaveCount(0);
   });
 }
+
+const documentRow = { id: "00000000-0000-0000-0000-000000000010", title: "Project notes", document_date: null, collection: "Work", created_at: "2026-11-13T12:00:00Z", status: "uploaded" };
+
+test("upload PDF refreshes the owned list and opens file metadata", async ({ page }) => {
+  await mockAuth(page);
+  let uploaded = false;
+  await page.route("**/api/documents?*", route => route.fulfill({ json: uploaded ? [documentRow] : [] }));
+  await page.route("**/api/documents/upload", async route => {
+    expect(route.request().headers()["authorization"]).toBe("Bearer fixture-access-token");
+    expect(route.request().headers()["content-type"]).toContain("multipart/form-data");
+    expect(route.request().postDataBuffer()?.toString()).toContain("notes.pdf");
+    uploaded = true;
+    await route.fulfill({ status: 201, json: { ...documentRow, content: "" } });
+  });
+  await page.route(`**/api/documents/${documentRow.id}`, route => route.fulfill({ json: { ...documentRow, content: "", original_filename: "notes.pdf", page_count: 3, file_size_bytes: 2000 } }));
+  await page.goto("/sign-in"); await signIn(page);
+  await expect(page.getByRole("heading", { name: "A fresh start." })).toBeVisible();
+  await page.getByLabel("Choose a PDF").setInputFiles({ name: "notes.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-fixture") });
+  await page.getByLabel("Document title").fill("Project notes");
+  await page.getByLabel("Collection (optional)").fill("Work");
+  await page.getByRole("button", { name: "Upload PDF", exact: true }).click();
+  await expect(page.getByText("“Project notes” was uploaded.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Uploaded · Text pending")).toBeVisible();
+  await page.getByRole("button", { name: /Project notes.*Work/ }).click();
+  await expect(page.getByRole("dialog")).toContainText("3 pages");
+  await expect(page.getByRole("dialog")).toContainText("stored privately");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await page.screenshot({ path: "test-results/document-library.png", fullPage: true });
+});
+
+test("non-PDF and oversized files are rejected before upload", async ({ page }) => {
+  await mockAuth(page);
+  let uploads = 0;
+  await page.route("**/api/documents/upload", route => { uploads++; return route.abort(); });
+  await page.goto("/sign-in"); await signIn(page);
+  await page.getByLabel("Choose a PDF").setInputFiles({ name: "note.txt", mimeType: "text/plain", buffer: Buffer.from("text") });
+  await expect(page.getByRole("alert").filter({ hasText: "Choose a PDF file" })).toBeVisible();
+  await page.getByLabel("Choose a PDF").setInputFiles({ name: "large.pdf", mimeType: "application/pdf", buffer: Buffer.alloc(30 * 1024 * 1024 + 1) });
+  await expect(page.getByRole("alert").filter({ hasText: "must not exceed 30 MiB" })).toBeVisible();
+  expect(uploads).toBe(0);
+  await expect(page.getByRole("button", { name: "Upload PDF", exact: true })).toBeDisabled();
+});
+
+test("damaged PDF error preserves the form and allows another attempt", async ({ page }) => {
+  await mockAuth(page);
+  await page.route("**/api/documents/upload", route => route.fulfill({ status: 422, json: { detail: "The PDF is damaged or cannot be opened" } }));
+  await page.goto("/sign-in"); await signIn(page);
+  await page.getByLabel("Choose a PDF").setInputFiles({ name: "bad.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-broken") });
+  await page.getByRole("button", { name: "Upload PDF", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "PDF is damaged" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Upload PDF", exact: true })).toBeEnabled();
+  await expect(page.getByLabel("Document title")).toHaveValue("bad");
+});
+
+test("list errors support retry without inventing document counts", async ({ page }) => {
+  await mockAuth(page);
+  let retry = false;
+  await page.route("**/api/documents?*", route => route.fulfill({ status: retry ? 200 : 503, json: retry ? [] : { detail: "Unavailable" } }));
+  await page.goto("/sign-in"); await signIn(page);
+  await expect(page.getByRole("alert").filter({ hasText: "Couldn’t load your documents" })).toBeVisible();
+  retry = true;
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByRole("heading", { name: "A fresh start." })).toBeVisible();
+});
+
+test("pagination requests the next page and returns to the first", async ({ page }) => {
+  await mockAuth(page);
+  const rows = Array.from({ length: 20 }, (_, index) => ({ ...documentRow, id: `00000000-0000-0000-0000-${String(index).padStart(12, "0")}`, title: `Note ${index}` }));
+  await page.route("**/api/documents?*", route => route.fulfill({ json: new URL(route.request().url()).searchParams.get("offset") === "0" ? rows : [] }));
+  await page.goto("/sign-in"); await signIn(page);
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "No more documents." })).toBeVisible();
+  await page.getByRole("button", { name: "Previous", exact: true }).click();
+  await expect(page.getByRole("button", { name: /Note 0.*Work/ })).toBeVisible();
+});
+
+test("upload and library fit a narrow screen", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockAuth(page);
+  await page.goto("/sign-in"); await signIn(page);
+  await expect(page.getByRole("heading", { name: "Your documents" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: "test-results/document-upload-mobile.png", fullPage: true });
+});
+
+test("document proxy endpoints reject missing credentials", async ({ request }) => {
+  expect((await request.get("/api/documents")).status()).toBe(401);
+  expect((await request.post("/api/documents/upload", { multipart: { file: { name: "a.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF") } } })).status()).toBe(401);
+  expect((await request.get(`/api/documents/${documentRow.id}`)).status()).toBe(401);
+});

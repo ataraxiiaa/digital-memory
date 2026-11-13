@@ -49,9 +49,13 @@ pydantic-core==2.50.4
     # via pydantic
 pygments==2.21.0
     # via pytest
+pypdf==6.21.4
+    # via -r src/backend/requirements.in
 pytest==9.2.0
     # via -r src/backend/requirements.in
 python-dotenv==1.2.4
+    # via -r src/backend/requirements.in
+python-multipart==0.0.33
     # via -r src/backend/requirements.in
 starlette==1.10.0
     # via fastapi

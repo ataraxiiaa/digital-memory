@@ -2,6 +2,7 @@
 
 from datetime import date, datetime
 from uuid import UUID
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -37,7 +38,12 @@ class DocumentSummary(BaseModel):
     collection: str
     synthetic: bool
     created_at: datetime
+    status: Literal["ready", "uploaded"] = "ready"
 
 
 class Document(DocumentSummary):
     content: str
+    storage_path: str | None = None
+    original_filename: str | None = None
+    file_size_bytes: int | None = None
+    page_count: int | None = None

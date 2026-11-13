@@ -1,9 +1,12 @@
 """FastAPI entry point with public health and authenticated user routes."""
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from backend.auth.routes import router as auth_router
 from backend.schemas.health import HealthResponse
+from backend.routes.documents import router as documents_router
+from backend.storage.documents import StorageUnavailable
 
 
 app = FastAPI(
@@ -13,6 +16,20 @@ app = FastAPI(
 )
 
 app.include_router(auth_router)
+app.include_router(documents_router)
+
+
+@app.middleware("http")
+async def prevent_document_caching(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path == "/documents" or request.url.path.startswith("/documents/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.exception_handler(StorageUnavailable)
+async def handle_storage_unavailable(request: Request, error: StorageUnavailable):
+    return JSONResponse(status_code=503, content={"detail": "Document storage is unavailable"}, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/health", response_model=HealthResponse, tags=["Health"])

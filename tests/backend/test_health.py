@@ -21,7 +21,7 @@ def test_health_returns_successful_json(client):
 
 
 def test_unknown_endpoint_returns_not_found(client):
-    assert client.get("/documents").status_code == 404
+    assert client.get("/not-an-endpoint").status_code == 404
 
 
 def test_health_rejects_unsupported_method(client):

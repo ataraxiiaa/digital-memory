@@ -1,6 +1,6 @@
 """Document contract and Supabase Data API storage boundary.
 
-Routes will use this boundary after authentication is wired up. Never accept an
+Authenticated routes use this boundary. Never accept an
 owner ID from a request: the database derives ownership from the user's token.
 """
 
@@ -28,7 +28,7 @@ The caller owns and closes the HTTP client. RLS authorizes every database call.
 Do not construct this with a secret/service-role key or reuse across users.
 """
 
-    SUMMARY_COLUMNS = "id,title,document_date,collection,synthetic,created_at"
+    SUMMARY_COLUMNS = "id,title,document_date,collection,synthetic,created_at,status"
 
     def __init__(
         self, client: httpx.AsyncClient, *, url: str,
@@ -92,7 +92,7 @@ Do not construct this with a secret/service-role key or reuse across users.
             raise StorageUnavailable("Invalid document storage response") from None
 
     async def get(self, document_id: UUID) -> Document | None:
-        response = await self._request("GET", params={"select": f"{self.SUMMARY_COLUMNS},content", "id": f"eq.{document_id}", "limit": 1})
+        response = await self._request("GET", params={"select": f"{self.SUMMARY_COLUMNS},content,storage_path,original_filename,file_size_bytes,page_count", "id": f"eq.{document_id}", "limit": 1})
         try:
             rows = response.json()
             if not isinstance(rows, list) or len(rows) > 1:
