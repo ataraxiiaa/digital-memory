@@ -3,7 +3,7 @@
 We add one working layer at a time. Each checkpoint ends with a runnable result and checks before the next layer.
 
 1. **API foundation (implemented):** FastAPI application, `GET /health`, API documentation, and request-level tests.
-2. **Supabase document storage:** (2a) prepare the schema and storage adapter; (2b) connect the Supabase project and verify ownership with two test users; (2c) add authenticated create/list/read API routes. The schema and offline adapter are prepared; hosted verification and routes remain pending.
+2. **Supabase document storage:** (2a) prepare the schema and storage adapter; (2b) connect the Supabase project, apply migrations, and verify ownership with two test users; (2c) add authenticated create/list/read API routes. The initial migration is applied and catalog checks passed; two-user isolation testing and routes remain pending.
 3. **Text ingestion:** import the ten synthetic notes; then handle the downloaded long texts in passages, keeping original text and source positions. Define size limits and clear errors, preserve Unicode, and prevent silent truncation.
 4. **Search and evidence:** search passages, paginate results, and return exact source references. Verify matches from the start, middle, and end of long files.
 5. **Frontend integration:** connect the existing library and source previews, add loading/error/empty states, and configure local browser access.
@@ -27,14 +27,28 @@ PostgreSQL stores the title, text, document date, collection, synthetic-data fla
 ### Connect the project in the next checkpoint
 
 1. Create or select the intended Supabase development project.
-2. Review `supabase/migrations/202611130001_documents.sql`, then run it once in that project's SQL editor. It creates the table, index, grants, and ownership policies in one transaction. It deliberately fails if the table already exists; do not rerun it against an existing schema without reviewing it.
+2. Review `supabase/migrations/202611130001_documents.sql`, then use the migration command below. It creates the table, index, grants, and ownership policies in one tracked transaction. The initial migration has already been applied to the configured project; the runner safely skips recorded migrations.
 3. Use the project URL and **publishable** key from the project settings. Add `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` to the workspace-root `.env`, preserving existing entries. Connection helpers load that file automatically; process environment variables take precedence. `.env.example` documents the names. Database passwords and secret keys are not needed for this Data API connection.
 4. Enable the intended Supabase Auth sign-in method and create two development test users. The adapter requires a user's access token; a publishable key alone does not authorize document access.
 5. Verify with user A: insert and retrieve a document. Verify with user B: A's document must not appear in a list or by ID. Requests without a user token must not read or create documents. Update/delete should be denied in this checkpoint.
 
 Ownership comes from `auth.uid()`, not a client-provided owner ID. Row-level security lets each authenticated user read and insert only their own rows. The adapter uses a publishable key plus a user token and rejects new secret keys. Do not replace it with a secret/service-role key, which would bypass these policies.
 
-No cloud changes have been applied from this repository. Current tests use mocked HTTP responses, so they verify request construction, response parsing, error handling, pagination, and preservation of long Unicode text; they do **not** prove live database access or RLS isolation. The adapter is not exposed through HTTP routes yet. Upload limits, passage splitting, original-file storage, and authentication wiring are still upcoming.
+The initial document migration has been applied to the configured Supabase project. Live database catalog checks verified all eight columns, the index, enabled RLS, both policy names, and the intended role permissions. Offline adapter tests use mocked HTTP responses and do **not** prove two-user RLS isolation; that remains pending. The adapter is not exposed through HTTP routes yet. Upload limits, passage splitting, original-file storage, and authentication wiring are still upcoming.
+
+### Apply migrations
+
+After installing the updated requirements, run from the workspace root:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.backend.supabase.migrate
+```
+
+This administrative command reads the project URL and `SUPABASE_DATABASE_PASSWORD` from the ignored root `.env` or process environment. It connects directly to PostgreSQL over encrypted TLS. Direct database access requires IPv6 connectivity or the project's IPv4 add-on; the Data API connection check alone does not establish database reachability.
+
+The runner applies migration SQL and a checksum history entry in one transaction, with verification before commit. It uses `digital_memory_meta.schema_migrations`, a private application-owned history table separate from Supabase CLI migration history. A transaction lock prevents concurrent runs. Recorded files are skipped, changed checksums are rejected, and an untracked existing documents table requires review. Keep applied SQL files unchanged and add a new migration for future changes. Do not also apply these files manually or through the Supabase CLI without reconciling history first.
+
+The migration creates the empty document table; it does not upload fixtures or create users. `/health` and the regular Data API adapter do not use the database password.
 
 ### Read-only connection check
 

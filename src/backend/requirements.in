@@ -5,3 +5,5 @@ httpx>=0.28,<1
 python-dotenv>=1,<2
 # Development and request-level tests
 pytest>=8,<10
+# Administrative migration tooling (not used by HTTP routes)
+psycopg[binary]>=3.2,<4

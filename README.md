@@ -26,7 +26,7 @@ The frontend lives under `src/frontend/`; the API foundation lives under `src/ba
 
 ## Backend progress
 
-Checkpoint 1 provides `GET /health` and interactive API documentation. Checkpoint 2a prepares Supabase PostgreSQL storage with an ownership-protected SQL migration and a tested storage adapter. No hosted migration has been applied, and document routes are not exposed yet. See [backend instructions and the five-step roadmap](src/backend/README.md) for setup and the remaining connection, authentication, ingestion, search, and frontend work. SQLite is not used.
+Checkpoint 1 provides `GET /health` and interactive API documentation. Supabase PostgreSQL storage now has an applied document-table migration, verified catalog permissions, and a tested storage adapter. Two-user isolation checks and authenticated document routes are still pending. See [backend instructions and the five-step roadmap](src/backend/README.md) for setup and the remaining authentication, ingestion, search, and frontend work. SQLite is not used.
 
 Connection helpers now load `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` from the workspace-root `.env` or the process environment. Run `.\.venv\Scripts\python.exe -m src.backend.check_supabase` for a read-only connectivity diagnostic; add `--documents` to check a signed-in user's document access using a hidden token prompt. Live checks require your project configuration.
 
