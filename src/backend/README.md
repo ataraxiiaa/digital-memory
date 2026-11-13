@@ -72,7 +72,35 @@ Paste that user's access token at the hidden terminal prompt; do not put it in a
 
 References: [Supabase API keys](https://supabase.com/docs/guides/getting-started/api-keys), [row-level security](https://supabase.com/docs/guides/database/postgres/row-level-security), and [database and Storage architecture](https://supabase.com/docs/guides/getting-started/the-supabase-way-to-build).
 
-## Checkpoint 1: what happens
+## Backend authentication API
+
+`GET /auth/me` is now implemented. It accepts `Authorization: Bearer <Supabase user access token>`, calls the configured project's `/auth/v1/user` endpoint, and returns only the verified user's `id`, `email`, `role`, and `email_confirmed_at`. No token decoding without verification is used. Supabase handles sign-in, passwords, session issuance, and refresh; this API does not implement a second password/login system.
+
+Example response:
+
+```json
+{
+  "id": "00000000-0000-0000-0000-000000000001",
+  "email": "alex@example.test",
+  "role": "authenticated",
+  "email_confirmed_at": "2026-11-13T10:00:00Z"
+}
+```
+
+To try it, start the backend, open http://127.0.0.1:8000/docs, select **Authorize**, and enter a signed-in Supabase user's **access token** (without the `Bearer` prefix). Then execute `GET /auth/me`. A project publishable key, refresh token, database password, or administrative key is not a user access token. Tokens expire; sign in or refresh through Supabase when needed. The endpoint does not impose an additional email-confirmation policy; that behavior follows the configured Supabase sign-in settings.
+
+| Result | HTTP status |
+| --- | --- |
+| Verified authenticated user | 200 |
+| Missing/malformed header or Supabase-rejected token | 401 with a Bearer challenge |
+| Missing configuration, timeout, provider rate limit, or provider failure | 503 |
+| Malformed user identity returned by the provider | 502 |
+
+Responses use `Cache-Control: no-store`. Errors omit credentials and upstream response bodies. Each request is validated remotely, so protected endpoints depend on Supabase Auth availability. `/health` and API docs stay public. The reusable `get_authenticated_session` dependency retains the verified user and a masked access token for future document routes; tokens must not be logged.
+
+Code is separated into `auth/dependencies.py` (token checks and validation), `auth/routes.py` (endpoint), and `schemas/auth.py` (response schema). Tests in `tests/backend/test_auth.py` mock Supabase for valid, expired/rejected, malformed, unavailable, and timeout scenarios. A successful mock test is not a live sign-in or a two-user RLS test. Frontend sign-in and document routes remain upcoming.
+
+## Health request flow
 
 ```text
 Browser or test client -> GET /health -> FastAPI route -> JSON response

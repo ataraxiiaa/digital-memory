@@ -30,6 +30,8 @@ Checkpoint 1 provides `GET /health` and interactive API documentation. Supabase 
 
 Connection helpers now load `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` from the workspace-root `.env` or the process environment. Run `.\.venv\Scripts\python.exe -m src.backend.check_supabase` for a read-only connectivity diagnostic; add `--documents` to check a signed-in user's document access using a hidden token prompt. Live checks require your project configuration.
 
+`GET /auth/me` now verifies a Supabase user access token and returns the signed-in user's basic identity. It is available through the bearer-token **Authorize** flow at `/docs`. `/health` stays public. Frontend sign-in, document routes, and two-user ownership verification are subsequent steps.
+
 ## Local tools
 
 Run commands from the repository root in PowerShell:

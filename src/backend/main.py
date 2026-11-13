@@ -1,15 +1,18 @@
-"""Application entry point for the first backend checkpoint."""
+"""FastAPI entry point with public health and authenticated user routes."""
 
 from fastapi import FastAPI
 
+from backend.auth.routes import router as auth_router
 from backend.schemas.health import HealthResponse
 
 
 app = FastAPI(
     title="Digital Memory API",
     version="0.1.0",
-    description="Local development API. Checkpoint 1: application health.",
+    description="Digital Memory API with Supabase-backed user authentication.",
 )
+
+app.include_router(auth_router)
 
 
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
