@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabaseClient } from "../lib/supabase";
+import { signupErrorMessage } from "../lib/auth-errors";
 
 type User = { id: string; email: string | null; role: "authenticated" };
 type AuthContextValue = {
@@ -12,6 +13,7 @@ type AuthContextValue = {
   error: string | null;
   configured: boolean;
   signIn: (email: string, password: string) => Promise<string | null>;
+  signUp: (email: string, password: string) => Promise<{ error: string | null; needsConfirmation: boolean }>;
   signOut: () => Promise<string | null>;
   retry: () => void;
 };
@@ -91,6 +93,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const signUp = useCallback(async (email: string, password: string) => {
+    const client = getSupabaseClient();
+    if (!client) return { error: "Account creation isn’t configured. Please contact the workspace owner.", needsConfirmation: false };
+    try {
+      const { data, error } = await client.auth.signUp({
+        email: email.trim(), password,
+        options: { emailRedirectTo: `${window.location.origin}/sign-in` },
+      });
+      if (!error) return { error: null, needsConfirmation: !data.session };
+      return { error: signupErrorMessage(error), needsConfirmation: false };
+    } catch {
+      return { error: "Couldn’t reach signup. Check your connection and try again.", needsConfirmation: false };
+    }
+  }, []);
+
   const signOut = useCallback(async () => {
     try {
       const { error } = await getSupabaseClient()!.auth.signOut({ scope: "local" });
@@ -104,7 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const user = session && verified?.token === session.access_token ? verified.user : null;
   const loading = !initialized || (!!session && !error && (!user || checking));
-  return <AuthContext.Provider value={{ session, user, loading, error, configured, signIn, signOut, retry: () => setAttempt(value => value + 1) }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ session, user, loading, error, configured, signIn, signUp, signOut, retry: () => setAttempt(value => value + 1) }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

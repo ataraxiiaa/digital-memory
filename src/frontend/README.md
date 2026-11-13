@@ -1,6 +1,6 @@
 # Digital Memory frontend
 
-Next.js App Router with Supabase email/password sign-in and an empty personal workspace.
+Next.js App Router with Supabase email/password sign-in, signup, and an empty personal workspace.
 
 ## Configure
 
@@ -24,7 +24,11 @@ npm.cmd ci
 npm.cmd run dev
 ```
 
-Open http://localhost:3000/sign-in and use an existing Supabase account. If email confirmation is enabled, confirm the account first. Sign-up, password recovery, OAuth, and MFA challenge screens are not implemented in this checkpoint.
+Open http://localhost:3000/sign-in to sign in or http://localhost:3000/sign-up to create an account. Signup checks matching passwords and requires at least 8 characters; Supabase enforces any additional project password requirements.
+
+Enable new-user signup and email/password authentication in Supabase. In Auth URL configuration, set your Site URL and allow the exact frontend `/sign-in` redirect URL (locally `http://localhost:3000/sign-in`; add `http://127.0.0.1:3000/sign-in` if used). For deployment, add the actual HTTPS frontend URL. Signup passes the current origin's `/sign-in` URL as `emailRedirectTo`.
+
+If email confirmation is enabled, signup shows a check-email message without opening the workspace. Follow the Supabase confirmation link, then sign in manually. This app does not consume URL-fragment sessions; unused implicit-flow token fragments are removed from the address bar. If confirmation is disabled and Supabase returns a session, the existing backend identity check runs before opening the empty workspace. Responses avoid claiming an email address is available, because Supabase can obscure existing-account signups. Password recovery, OAuth, and MFA challenge screens are not implemented.
 
 ## Sign-in flow
 
@@ -37,7 +41,7 @@ Open http://localhost:3000/sign-in and use an existing Supabase account. If emai
 
 The same-origin proxy avoids browser CORS configuration and sends no passwords or refresh tokens to FastAPI. Identity responses are not cached. Frontend gating controls navigation; authorization for actual private data must remain enforced in FastAPI and database RLS. The workspace includes no bundled documents. Original document storage APIs are still upcoming.
 
-Code lives in `components/auth-provider.tsx`, `components/auth-gate.tsx`, `app/sign-in/page.tsx`, `lib/supabase.ts`, and `app/api/auth/me/route.ts`. `components/account-menu.tsx` displays the real signed-in account.
+Code lives in `components/auth-provider.tsx`, `components/auth-screen.tsx`, `components/auth-gate.tsx`, `app/sign-in/page.tsx`, `app/sign-up/page.tsx`, `lib/supabase.ts`, and `app/api/auth/me/route.ts`. `components/account-menu.tsx` displays the real signed-in account.
 
 ## Verify
 

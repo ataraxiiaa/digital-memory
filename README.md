@@ -74,6 +74,6 @@ Continue in small verified checkpoints. The frontend remains independent until t
 
 ## Private data
 
-The bundled synthetic notes and downloaded book fixtures have been removed. Documents will be explicitly added by their users through the upcoming ingestion flow.
+The bundled synthetic notes and downloaded book fixtures have been removed. Documents will be explicitly added by their users through the upcoming ingestion flow. Account creation is available at `/sign-up`, including email-confirmation handling and a link back to sign-in.
 
 Use synthetic documents during development. Keep secrets in ignored local environment files and private imports under ignored `data/` or `uploads/` directories. Never commit real personal documents or credentials.
