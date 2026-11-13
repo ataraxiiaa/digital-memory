@@ -1,0 +1,13 @@
+Synthetic: true
+ID: sample-004
+Title: Notes from the library
+Date: 2026-11-08
+Type: Note
+Collection: Learning
+Author: Alex Morgan
+
+I spent the afternoon at Cedar Library reading my own draft notes about attention. This entry records my reflections; it is not a quotation from a published book or a research finding.
+
+Remembering an idea feels easier when I keep its context. For the Studio project, each result could show the passage that supports it and the document title beside it.
+
+The reading list from November 1 still has unfinished topics. Urban gardens can wait until next month. I want to discuss the source-preview idea with Sam Chen on November 10 before treating it as a decision.

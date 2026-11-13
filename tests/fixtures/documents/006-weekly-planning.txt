@@ -1,0 +1,13 @@
+Synthetic: true
+ID: sample-006
+Title: A quieter way to plan
+Date: 2026-11-12
+Type: Note
+Collection: Personal
+Author: Alex Morgan
+
+Keep Sunday mornings open for a walk and a little planning. A short list of what matters is more useful than a long list of everything. This is a proposed routine, not a record of walks already completed.
+
+For this week, I want to finish the fictional notes for the Studio project and return my library books. Sam Chen is reviewing the project labels; I do not need to duplicate that task.
+
+The possible spring visit to Pine Ridge remains an idea from the November 5 walk. There is no confirmed travel date. I will revisit it after winter rather than putting a made-up date on the calendar.
