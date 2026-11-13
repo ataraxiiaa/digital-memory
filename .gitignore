@@ -9,8 +9,11 @@ __pycache__/
 # JavaScript dependencies and build output
 node_modules/
 .next/
+.next-e2e/
 out/
 coverage/
+test-results/
+playwright-report/
 *.tsbuildinfo
 
 # Local configuration (keep placeholder examples)

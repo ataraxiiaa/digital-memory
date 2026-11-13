@@ -30,7 +30,7 @@ Checkpoint 1 provides `GET /health` and interactive API documentation. Supabase 
 
 Connection helpers now load `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` from the workspace-root `.env` or the process environment. Run `.\.venv\Scripts\python.exe -m src.backend.check_supabase` for a read-only connectivity diagnostic; add `--documents` to check a signed-in user's document access using a hidden token prompt. Live checks require your project configuration.
 
-`GET /auth/me` now verifies a Supabase user access token and returns the signed-in user's basic identity. It is available through the bearer-token **Authorize** flow at `/docs`. `/health` stays public. Frontend sign-in, document routes, and two-user ownership verification are subsequent steps.
+`GET /auth/me` verifies a Supabase user access token and returns the signed-in user's basic identity. It is available through the bearer-token **Authorize** flow at `/docs`. `/health` stays public. The frontend now has email/password sign-in, session restoration and refresh, backend identity verification, and local sign-out. Document routes and two-user ownership verification remain upcoming.
 
 ## Local tools
 
@@ -64,9 +64,9 @@ npm.cmd run build
 npm.cmd start
 ```
 
-The interface includes an overview, searchable documents, collection filters, a timeline, original passage previews, and session-only saving. All people and documents are explicitly labeled synthetic sample data. Saved items reset on reload. No API, authentication, file imports, or persistence is connected.
+The signed-in workspace starts empty, with Overview, Documents, and Timeline navigation. No bundled example documents or invented user identity are displayed. Supabase authentication is connected through the backend identity endpoint; user document data and file imports are not connected yet. See [frontend configuration and sign-in instructions](src/frontend/README.md). Both frontend and backend must run for sign-in verification.
 
-Pages and responsive styles live in `src/frontend/app/`; sample documents and search helpers live in `src/frontend/lib/`. Tests under `tests/frontend/` cover search, combined filters, empty results, ordering, and date formatting using Node's built-in test runner. No separate lint tool is configured. No image assets are required; the interface uses CSS and system fonts.
+Pages and responsive styles live in `src/frontend/app/`; authentication components and the Supabase client live under `src/frontend/components/` and `src/frontend/lib/`. Playwright tests under `tests/frontend/e2e/` cover authentication and the empty workspace. No separate lint tool is configured. No image assets are required; the interface uses CSS and system fonts.
 
 ## Learning approach
 
@@ -74,8 +74,6 @@ Continue in small verified checkpoints. The frontend remains independent until t
 
 ## Private data
 
-Three downloaded long-text fixtures are available under `tests/fixtures/long-documents/`: Pride and Prejudice, Moby Dick, and War and Peace. That folder includes source links, rights notes, checksums, sizes, and future ingestion checks. These published texts are separate from the synthetic notes and are not loaded by the frontend.
-
-Ten original synthetic source documents are available under `tests/fixtures/documents/`. See that directory's README for the metadata format and expected search/timeline scenarios. They are development fixtures for a future backend and are not yet loaded by the frontend.
+The bundled synthetic notes and downloaded book fixtures have been removed. Documents will be explicitly added by their users through the upcoming ingestion flow.
 
 Use synthetic documents during development. Keep secrets in ignored local environment files and private imports under ignored `data/` or `uploads/` directories. Never commit real personal documents or credentials.

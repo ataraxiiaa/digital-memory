@@ -4,7 +4,7 @@ We add one working layer at a time. Each checkpoint ends with a runnable result 
 
 1. **API foundation (implemented):** FastAPI application, `GET /health`, API documentation, and request-level tests.
 2. **Supabase document storage:** (2a) prepare the schema and storage adapter; (2b) connect the Supabase project, apply migrations, and verify ownership with two test users; (2c) add authenticated create/list/read API routes. The initial migration is applied and catalog checks passed; two-user isolation testing and routes remain pending.
-3. **Text ingestion:** import the ten synthetic notes; then handle the downloaded long texts in passages, keeping original text and source positions. Define size limits and clear errors, preserve Unicode, and prevent silent truncation.
+3. **Text ingestion:** allow users to add their own documents; handle long texts in passages, keeping original text and source positions. Define size limits and clear errors, preserve Unicode, and prevent silent truncation. No bundled document corpus remains.
 4. **Search and evidence:** search passages, paginate results, and return exact source references. Verify matches from the start, middle, and end of long files.
 5. **Frontend integration:** connect the existing library and source previews, add loading/error/empty states, and configure local browser access.
 

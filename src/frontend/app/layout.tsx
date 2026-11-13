@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./auth.css";
+import { AuthProvider } from "../components/auth-provider";
 
 export const metadata: Metadata = {
   title: "Digital Memory — Your workspace",
-  description: "Explore a synthetic collection of notes, moments, and their sources.",
+  description: "A personal space for notes, moments, and their sources.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="en"><body><AuthProvider>{children}</AuthProvider></body></html>;
 }
