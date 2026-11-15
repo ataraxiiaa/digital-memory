@@ -178,3 +178,36 @@ def test_processing_requires_authentication(api):
     client, state, _ = api
     assert client.post(f"/documents/{DOC}/process").status_code == 401
     assert state["row"]["status"] == "uploaded"
+
+
+def test_source_passages_use_saved_report_and_stable_citations(api):
+    client, state, calls = api
+    client.post(f"/documents/{DOC}/process", headers=HEADERS)
+    response = client.get(f"/documents/{DOC}/passages?limit=1&offset=0", headers=HEADERS)
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    data = response.json()
+    assert data["total"] == 1
+    passage = data["passages"][0]
+    assert passage["text"] == "Budget approved."
+    assert passage["citation"]["document_id"] == DOC
+    assert passage["citation"]["extraction_id"] == state["report"]["native_extraction"]["id"]
+    assert client.get(f"/documents/{DOC}/passages", headers=HEADERS).json()["passages"][0]["id"] == passage["id"]
+    assert client.get(f"/documents/{DOC}/passages?offset=10", headers=HEADERS).json()["passages"] == []
+    assert sum("start_document_extraction" in call.url.path for call in calls) == 1
+
+
+def test_source_passages_require_auth_and_owned_completed_report(api):
+    client, state, _ = api
+    assert client.get(f"/documents/{DOC}/passages").status_code == 401
+    assert client.get(f"/documents/{DOC}/passages", headers=HEADERS).status_code == 404
+    state["row"].update(status="processing", processing_run_id=RUN)
+    assert client.get(f"/documents/{DOC}/passages", headers=HEADERS).status_code == 409
+    state["hidden"] = True
+    assert client.get(f"/documents/{DOC}/passages", headers=HEADERS).status_code == 404
+
+
+@pytest.mark.parametrize("query", ["limit=0", "limit=101", "offset=-1"])
+def test_passage_pagination_rejects_invalid_ranges(api, query):
+    client, _, _ = api
+    assert client.get(f"/documents/{DOC}/passages?{query}", headers=HEADERS).status_code == 422

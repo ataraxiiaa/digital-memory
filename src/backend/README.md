@@ -1,5 +1,25 @@
 # Backend checkpoints
 
+## Knowledge graph checkpoint 1 - source passages
+
+`services/source_passages.py` deterministically partitions saved native/OCR region strings into passages for later entity extraction. `schemas/passages.py` defines passage and paginated-response contracts. Each passage has a stable UUID, ordinal, exact text, source SHA-256, native/OCR method, review flags, and a `CitationReference` containing document, extraction run, physical page, region, and character range.
+
+The first algorithm, `source-passages-v1`, uses a 1,200-character maximum. It prefers paragraph boundaries, then sentence-like punctuation, then whitespace, falling back to a hard character boundary for long unbroken text. This is a character limit, not a model token limit or linguistic sentence detector. Passages never cross pages or regions. They have no overlap. Original Unicode, whitespace, line breaks, and hyphenation are retained. Whitespace-only fragments and empty, failed, or unsupported regions are excluded. All non-whitespace characters in eligible regions remain covered. Offsets are zero-based, end-exclusive Python string offsets, matching `ExtractionRun.resolve_citation`.
+
+IDs derive from the extraction UUID, region UUID, algorithm/configuration, and source offsets. Rebuilding from the same saved report produces identical IDs after restart or JSON round trips. Re-extracting a PDF creates new run IDs and therefore new passage IDs. Existing reports work without reprocessing or a database migration. Passages are derived on read from privately persisted reports; a separate passage index/table can be added alongside entity storage later. This endpoint operates on finalized PDF extraction reports. Direct JSON notes need a future document-level source-locator adapter.
+
+`GET /documents/{id}/passages?limit=20&offset=0` requires the same bearer token and ownership checks as the extraction endpoint. It returns extraction IDs, algorithm configuration, total count, skipped-region count, and a slice of passages. Limits are 1-100 with nonnegative offsets. Missing/hidden documents return 404, and unfinished or unavailable saved results retain the extraction endpoint's 409 behavior. It makes no database writes or model calls. Pagination currently reads and partitions the saved report in memory.
+
+Page order is physical PDF order, followed by native and then OCR regions on each page. These regions retain distinct provenance even when strings happen to match. Review flags inherit report, extraction, page, region, layout, and table warnings. OCR text remains reviewable. Native page text that contains flattened tables still needs review; this step does not reinterpret table numbers or repair equations. Structured cell text is not flattened into additional passages. Future entity extraction should use these warnings when producing suggestions.
+
+For local inspection, provide an existing saved report and a new output filename:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.backend.services.source_passages .cache/attention-ocr-v2.json --output .cache/attention-source-passages-v1.json
+```
+
+The Attention report produced 93 passages (40 native, 53 OCR). Every passage was checked against its exact source slice, with stable regenerated IDs and complete eligible non-whitespace coverage. This verifies passage provenance, not the accuracy of the original OCR or table extraction. Tests cover Unicode, CRLF, long unbroken strings, boundaries, separate regions, skipped failures, warning inheritance, stable IDs, pagination, and authenticated API access.
+
 ## Extraction checkpoint 6 - saved results and document status
 
 Migration `202611150001_extraction_status.sql` adds private extraction-attempt records and document processing metadata. Apply with `.\.venv\Scripts\python.exe -m src.backend.supabase.migrate` after configuring the development database. It has been applied and its ownership/permission checks passed on the configured project. Applied migrations remain immutable.

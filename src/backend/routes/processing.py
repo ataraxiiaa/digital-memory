@@ -9,13 +9,15 @@ from typing import Annotated, Callable
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from starlette.concurrency import run_in_threadpool
 
 from ..auth.dependencies import AuthenticatedSession, get_authenticated_session, get_auth_client, get_auth_settings
 from ..config import SupabaseSettings
 from ..schemas.documents import Document
 from ..schemas.layout import LayoutReport
+from ..schemas.passages import PassagePage
+from ..services.source_passages import passage_page
 from ..services.pdf_extraction import PDFExtractionError
 from ..storage.documents import StorageUnavailable, SupabaseDocumentStore
 from ..storage.extractions import SupabaseExtractionStore
@@ -133,3 +135,16 @@ async def get_extraction(document_id: UUID, store: Store, extractions: Extractio
     if report.native_extraction.document_id != document_id:
         raise StorageUnavailable("Stored extraction source does not match the document")
     return report
+
+
+@router.get("/{document_id}/passages", response_model=PassagePage)
+async def get_source_passages(
+    document_id: UUID, store: Store, extractions: Extractions,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> PassagePage:
+    report = await get_extraction(document_id, store, extractions)
+    try:
+        return passage_page(report, limit=limit, offset=offset)
+    except ValueError:
+        raise StorageUnavailable("Saved extraction is not ready for source passages") from None
