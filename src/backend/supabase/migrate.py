@@ -31,7 +31,7 @@ def transaction_body(sql: str) -> str:
 
 def verify_documents(connection) -> None:
     columns = connection.execute("select column_name from information_schema.columns where table_schema = 'public' and table_name = 'documents'").fetchall()
-    expected = {"id", "owner_id", "title", "content", "document_date", "collection", "synthetic", "created_at", "status", "storage_path", "original_filename", "file_size_bytes", "page_count"}
+    expected = {"id", "owner_id", "title", "content", "document_date", "collection", "synthetic", "created_at", "status", "storage_path", "original_filename", "file_size_bytes", "page_count", "processing_run_id", "processing_started_at", "processing_error"}
     if {row[0] for row in columns} != expected:
         raise ValueError("Document table columns do not match the migration")
     rls = connection.execute("select relrowsecurity from pg_class where oid = 'public.documents'::regclass").fetchone()
@@ -56,6 +56,21 @@ def verify_documents(connection) -> None:
     bucket = connection.execute("select public from storage.buckets where id = 'documents'").fetchone()
     if bucket != (False,):
         raise ValueError("Documents bucket must exist and remain private")
+    extraction = connection.execute("""
+        select relrowsecurity from pg_class where oid = 'public.document_extractions'::regclass
+    """).fetchone()
+    permissions = connection.execute("""
+        select has_table_privilege('authenticated', 'public.document_extractions', 'SELECT'),
+               has_table_privilege('authenticated', 'public.document_extractions', 'INSERT'),
+               has_table_privilege('authenticated', 'public.document_extractions', 'UPDATE'),
+               has_table_privilege('anon', 'public.document_extractions', 'SELECT'),
+               has_function_privilege('authenticated', 'public.start_document_extraction(uuid)', 'EXECUTE'),
+               has_function_privilege('anon', 'public.start_document_extraction(uuid)', 'EXECUTE'),
+               has_function_privilege('authenticated', 'public.finish_document_extraction(uuid,text,jsonb)', 'EXECUTE'),
+               has_function_privilege('anon', 'public.finish_document_extraction(uuid,text,jsonb)', 'EXECUTE')
+    """).fetchone()
+    if extraction != (True,) or permissions != (True, False, False, False, True, False, True, False):
+        raise ValueError("Extraction ownership or function permissions failed verification")
 
 
 def apply_migrations(connection) -> list[str]:

@@ -40,3 +40,16 @@ test("PDF file proxy preserves original bytes and requires credentials", async (
   expect(response.headers()["cache-control"]).toBe("no-store");
   expect(await response.body()).toEqual(pdfFixture());
 });
+
+test("processing and extraction proxies preserve authentication and response status", async ({ request }) => {
+  const base = "/api/documents/00000000-0000-0000-0000-000000000010";
+  expect((await request.post(`${base}/process`)).status()).toBe(401);
+  expect((await request.get(`${base}/extraction`)).status()).toBe(401);
+  const processed = await request.post(`${base}/process`, { headers });
+  expect(processed.status()).toBe(202);
+  expect((await processed.json()).status).toBe("processing");
+  const report = await request.get(`${base}/extraction`, { headers });
+  expect(report.status()).toBe(200);
+  expect(report.headers()["cache-control"]).toBe("no-store");
+  expect((await report.json()).native_extraction.pages[0].regions[0].text).toBe("Saved budget evidence");
+});

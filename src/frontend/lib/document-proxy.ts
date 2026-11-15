@@ -3,7 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 const headers = { "Cache-Control": "no-store" };
 const MAX_MULTIPART_BYTES = 30 * 1024 * 1024 + 64 * 1024;
 
-export async function proxyDocuments(request: NextRequest, path: string, upload = false) {
+export async function proxyDocuments(request: NextRequest, path: string, operation: "read" | "upload" | "process" = "read") {
+  const upload = operation === "upload";
+  const processing = operation === "process";
   const authorization = request.headers.get("authorization");
   if (!authorization?.toLowerCase().startsWith("bearer ")) {
     return NextResponse.json({ detail: "Sign in again to access your documents." }, { status: 401, headers });
@@ -33,9 +35,9 @@ export async function proxyDocuments(request: NextRequest, path: string, upload 
       upstreamHeaders["Content-Type"] = type;
     }
     const options: RequestInit & { duplex?: "half" } = {
-      method: upload ? "POST" : "GET", headers: upstreamHeaders,
+      method: upload || processing ? "POST" : "GET", headers: upstreamHeaders,
       cache: "no-store", redirect: "error",
-      signal: AbortSignal.any([request.signal, AbortSignal.timeout(upload ? 120000 : 20000)]),
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(processing ? 300000 : upload ? 120000 : 20000)]),
     };
     if (body) { options.body = body; options.duplex = "half"; }
     const response = await fetch(`${base}${path}`, options);
@@ -49,7 +51,8 @@ export async function proxyDocuments(request: NextRequest, path: string, upload 
         const error = await response.json().catch(() => null);
         detail = typeof error?.detail === "string" ? error.detail : "Check the PDF and form fields, then try again.";
       }
-      return NextResponse.json({ detail }, { status: [401, 404, 413, 415, 422].includes(response.status) ? response.status : 503, headers });
+      if (processing) detail = response.status === 409 ? "Extraction is already active or the processor is busy. Refresh the document status and try again shortly." : response.status === 401 ? "Your session expired. Please sign in again." : "Could not confirm extraction. Refresh the document status before retrying.";
+      return NextResponse.json({ detail }, { status: [401, 404, 409, 413, 415, 422].includes(response.status) ? response.status : 503, headers });
     }
     return NextResponse.json(await response.json(), { status: response.status, headers });
   } catch {

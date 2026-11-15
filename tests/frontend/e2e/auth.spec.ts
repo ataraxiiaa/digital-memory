@@ -184,10 +184,10 @@ test("upload PDF refreshes the owned list and opens file metadata", async ({ pag
   await page.getByLabel("Collection (optional)").fill("Work");
   await page.getByRole("button", { name: "Upload PDF", exact: true }).click();
   await expect(page.getByText("“Project notes” was uploaded.", { exact: false })).toBeVisible();
-  await expect(page.getByText("Uploaded · Text pending")).toBeVisible();
+  await expect(page.getByText("Uploaded", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: /Project notes.*Work/ }).click();
   await expect(page.getByRole("dialog")).toContainText("3 pages");
-  await expect(page.getByRole("dialog")).toContainText("stored privately");
+  await expect(page.getByRole("dialog")).toContainText("Your PDF is stored");
   await expect(page.locator('iframe[title="PDF preview: notes.pdf"]')).toHaveAttribute("src", /^blob:/);
   await expect(page.getByRole("link", { name: "Download PDF" })).toHaveAttribute("download", "notes.pdf");
   await page.screenshot({ path: "test-results/pdf-viewer.png", fullPage: true });
@@ -285,4 +285,64 @@ test("PDF viewer supports retry and releases its temporary URL on close", async 
   const src = await iframe.getAttribute("src");
   await page.getByRole("button", { name: "Close document" }).click();
   await expect.poll(() => page.evaluate(() => (window as unknown as { revoked: string[] }).revoked)).toContain(src);
+});
+
+test("document processing shows persisted status and extracted evidence after reload", async ({ page }) => {
+  await mockAuth(page);
+  let row = { ...documentRow, original_filename: "notes.pdf", page_count: 1,
+    file_size_bytes: pdfFixture().length, content: "", processing_run_id: null as string | null,
+    processing_started_at: null as string | null };
+  let finish: () => void = () => {};
+  await page.route("**/api/documents?*", route => route.fulfill({ json: [row] }));
+  await page.route(`**/api/documents/${row.id}`, route => route.fulfill({ json: row }));
+  await page.route(`**/api/documents/${row.id}/process`, async route => {
+    expect(route.request().method()).toBe("POST");
+    row = { ...row, status: "processing", processing_run_id: "00000000-0000-0000-0000-000000000020", processing_started_at: new Date().toISOString() };
+    finish = () => { row = { ...row, status: "needs_review" }; };
+    await route.fulfill({ status: 202, json: row });
+  });
+  await page.route(`**/api/documents/${row.id}/extraction`, route => route.fulfill({ json: {
+    native_extraction: { pages: [{ page_number: 1, warnings: [], regions: [{ text: "Budget approved." }] }] },
+    ocr_extraction: { pages: [{ page_number: 1, warnings: [], regions: [{ text: "2000 USD" }] }] },
+    pages: [{ page_number: 1, warnings: ["Check the original page."] }],
+    tables: [{ page_number: 1, warnings: ["Check table values."] }], warnings: [],
+  } }));
+  await page.goto("/sign-in"); await signIn(page);
+  await page.getByRole("button", { name: /Project notes.*Work/ }).click();
+  await page.getByRole("button", { name: "Extract document", exact: true }).click();
+  await expect(page.getByRole("dialog").getByText("Processing", { exact: true })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole("button", { name: "Extracting…", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Close document" }).click();
+  finish();
+  await expect(page.locator('.document-row [data-status="needs_review"]')).toBeVisible({ timeout: 12000 });
+  await page.getByRole("button", { name: /Project notes.*Work/ }).click();
+  await expect(page.getByRole("dialog").getByText("Needs review", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "View extracted text" }).click();
+  await expect(page.getByRole("dialog").getByText("Budget approved.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog").getByText("2000 USD", { exact: true })).toBeVisible();
+  await page.getByText("Review notes (2)").click();
+  await expect(page.getByText("Check table values.")).toBeVisible();
+  await page.screenshot({ path: "test-results/document-processing.png", fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.getByRole("dialog").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  await page.screenshot({ path: "test-results/document-processing-mobile.png", fullPage: true });
+  await page.reload();
+  await expect(page.locator('.document-row [data-status="needs_review"]')).toBeVisible();
+});
+
+test("failed extraction refreshes the persisted failure and offers retry", async ({ page }) => {
+  await mockAuth(page);
+  let row = { ...documentRow, original_filename: "notes.pdf", page_count: 1,
+    file_size_bytes: pdfFixture().length, content: "", processing_error: null as string | null };
+  await page.route("**/api/documents?*", route => route.fulfill({ json: [row] }));
+  await page.route(`**/api/documents/${row.id}`, route => route.fulfill({ json: row }));
+  await page.route(`**/api/documents/${row.id}/process`, async route => {
+    row = { ...row, status: "failed", processing_error: "Extraction could not finish. Please retry." };
+    await route.fulfill({ status: 503, json: { detail: "Could not confirm extraction. Refresh the document status." } });
+  });
+  await page.goto("/sign-in"); await signIn(page);
+  await page.getByRole("button", { name: /Project notes.*Work/ }).click();
+  await page.getByRole("button", { name: "Extract document", exact: true }).click();
+  await expect(page.getByRole("dialog").getByText("Failed", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry extraction", exact: true })).toBeEnabled();
 });

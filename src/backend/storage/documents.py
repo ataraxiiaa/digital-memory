@@ -28,7 +28,7 @@ The caller owns and closes the HTTP client. RLS authorizes every database call.
 Do not construct this with a secret/service-role key or reuse across users.
 """
 
-    SUMMARY_COLUMNS = "id,title,document_date,collection,synthetic,created_at,status"
+    SUMMARY_COLUMNS = "id,title,document_date,collection,synthetic,created_at,status,processing_run_id,processing_started_at,processing_error"
 
     def __init__(
         self, client: httpx.AsyncClient, *, url: str,

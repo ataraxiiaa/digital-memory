@@ -22,6 +22,12 @@ createServer(async (request, response) => {
     response.writeHead(200, { "Content-Type": "application/pdf", "Content-Disposition": "inline; filename=preview.pdf" });
     return response.end(pdfFixture());
   }
+  if (url.pathname === `/documents/${row.id}/process` && request.method === "POST") {
+    return send(202, { ...row, status: "processing", processing_run_id: "00000000-0000-0000-0000-000000000020" });
+  }
+  if (url.pathname === `/documents/${row.id}/extraction`) {
+    return send(200, { native_extraction: { pages: [{ page_number: 1, warnings: [], regions: [{ text: "Saved budget evidence" }] }] }, pages: [], tables: [], warnings: [], ocr_extraction: null });
+  }
   if (url.pathname === `/documents/${row.id}`) return send(200, row);
   return send(404, { detail: "Not found" });
 }).listen(3199, "127.0.0.1");

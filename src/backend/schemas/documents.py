@@ -38,7 +38,10 @@ class DocumentSummary(BaseModel):
     collection: str
     synthetic: bool
     created_at: datetime
-    status: Literal["ready", "uploaded"] = "ready"
+    status: Literal["ready", "uploaded", "processing", "needs_review", "failed"] = "ready"
+    processing_run_id: UUID | None = None
+    processing_started_at: datetime | None = None
+    processing_error: str | None = None
 
 
 class Document(DocumentSummary):

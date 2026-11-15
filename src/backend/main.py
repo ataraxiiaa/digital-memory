@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from backend.auth.routes import router as auth_router
 from backend.schemas.health import HealthResponse
 from backend.routes.documents import router as documents_router
+from backend.routes.processing import router as processing_router
 from backend.storage.documents import StorageUnavailable
 
 
@@ -17,6 +18,7 @@ app = FastAPI(
 
 app.include_router(auth_router)
 app.include_router(documents_router)
+app.include_router(processing_router)
 
 
 @app.middleware("http")

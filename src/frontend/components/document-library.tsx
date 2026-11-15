@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "./auth-provider";
 import { PdfViewer } from "./pdf-viewer";
 
-type DocumentSummary = { id: string; title: string; document_date: string | null; collection: string; created_at: string; status: "ready" | "uploaded" };
-type DocumentDetail = DocumentSummary & { content: string; original_filename: string | null; file_size_bytes: number | null; page_count: number | null };
+import { DocumentProcessing } from "./document-processing";
+import { documentStatusLabel, type DocumentSummary, type DocumentDetail } from "../lib/documents";
+
 const PAGE_SIZE = 20;
 const MAX_BYTES = 30 * 1024 * 1024;
 
@@ -36,6 +37,33 @@ export function DocumentLibrary() {
   const detailRequest = useRef<AbortController | null>(null);
   const mounted = useRef(true);
   const dialog = useRef<HTMLDialogElement>(null);
+
+  const updateDocument = useCallback((updated: DocumentDetail) => {
+    setDetail(current => current?.id === updated.id ? updated : current);
+    setDocuments(current => current.map(row => row.id === updated.id ? {
+      ...row, status: updated.status, processing_run_id: updated.processing_run_id,
+      processing_started_at: updated.processing_started_at, processing_error: updated.processing_error,
+    } : row));
+  }, []);
+
+  useEffect(() => {
+    if (!token || !documents.some(document => document.status === "processing")) return;
+    const controller = new AbortController();
+    let polling = false;
+    const timer = setInterval(async () => {
+      if (polling) return;
+      polling = true;
+      try {
+        const response = await fetch(`/api/documents?limit=${PAGE_SIZE}&offset=${offset}`, {
+          headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal,
+        });
+        if (response.status === 401) { await signOut(); return; }
+        if (response.ok && !controller.signal.aborted) setDocuments(await response.json());
+      } catch { /* Manual refresh remains available when polling cannot reach the service. */ }
+      finally { polling = false; }
+    }, 5000);
+    return () => { clearInterval(timer); controller.abort(); };
+  }, [documents, offset, token, signOut]);
 
   useEffect(() => {
     mounted.current = true;
@@ -94,7 +122,7 @@ export function DocumentLibrary() {
       try { result = JSON.parse(xhr.responseText); } catch { fail("Could not confirm the upload. Refresh your documents before retrying."); return; }
       if (xhr.status === 401) { void signOut(); fail("Your session expired. Please sign in again."); return; }
       if (xhr.status !== 201) { fail(typeof result.detail === "string" ? result.detail : "The upload failed. Please check your PDF and try again."); return; }
-      setSuccess(`“${result.title}” was uploaded. Text extraction is not available yet.`);
+      setSuccess(`“${result.title}” was uploaded. You can now extract its text.`);
       setFile(null); setTitle(""); setCollection("");
       if (input.current) input.current.value = "";
       setOffset(0); setRevision(value => value + 1);
@@ -129,10 +157,10 @@ export function DocumentLibrary() {
       </form>
     </section>
     <section className="library" aria-labelledby="library-heading"><div className="section-heading"><div><h2 id="library-heading">Your documents</h2><p>Originals you’ve added to your own collection.</p></div><button className="text-button" disabled={loading} onClick={() => setRevision(value => value + 1)}>Refresh documents</button></div>
-      {loading ? <p className="library-status" role="status">Loading your documents…</p> : listError ? <div className="library-error" role="alert">{listError}<button className="text-button" onClick={() => setRevision(value => value + 1)}>Try again</button></div> : documents.length === 0 ? <div className="empty"><h2>{offset ? "No more documents." : "A fresh start."}</h2><p>{offset ? "Go back to see earlier results." : "Choose a PDF above to start your collection."}</p></div> : <div className="document-list">{documents.map(document => <button className="document-row" key={document.id} disabled={detailLoading} onClick={() => void openDocument(document.id)}><span className="document-icon" aria-hidden="true">PDF</span><span className="document-info"><span className="document-title">{document.title}</span><span className="document-meta">{document.collection} · Added {displayDate(document.created_at)}</span></span><span className="upload-state">{document.status === "uploaded" ? "Uploaded · Text pending" : "Text ready"}</span><span className="row-arrow" aria-hidden="true">↗</span></button>)}</div>}
+      {loading ? <p className="library-status" role="status">Loading your documents…</p> : listError ? <div className="library-error" role="alert">{listError}<button className="text-button" onClick={() => setRevision(value => value + 1)}>Try again</button></div> : documents.length === 0 ? <div className="empty"><h2>{offset ? "No more documents." : "A fresh start."}</h2><p>{offset ? "Go back to see earlier results." : "Choose a PDF above to start your collection."}</p></div> : <div className="document-list">{documents.map(document => <button className="document-row" key={document.id} disabled={detailLoading} onClick={() => void openDocument(document.id)}><span className="document-icon" aria-hidden="true">PDF</span><span className="document-info"><span className="document-title">{document.title}</span><span className="document-meta">{document.collection} · Added {displayDate(document.created_at)}</span></span><span className="upload-state" data-status={document.status}>{documentStatusLabel[document.status]}</span><span className="row-arrow" aria-hidden="true">↗</span></button>)}</div>}
       {detailLoading && <p role="status">Opening document…</p>}{detailError && <p className="library-error" role="alert">{detailError}</p>}
       {!loading && !listError && (offset > 0 || documents.length === PAGE_SIZE) && <div className="pagination"><button className="text-button" disabled={offset === 0} onClick={() => setOffset(value => Math.max(0, value - PAGE_SIZE))}>Previous</button><span>Page {offset / PAGE_SIZE + 1}</span><button className="text-button" disabled={documents.length < PAGE_SIZE} onClick={() => setOffset(value => value + PAGE_SIZE)}>Next</button></div>}
     </section>
-    <dialog ref={dialog} className={detail?.original_filename ? "detail library-dialog pdf-document-dialog" : "detail library-dialog"} onClose={() => setDetail(null)} onClick={event => { if (event.target === event.currentTarget) { dialog.current?.close(); setDetail(null); } }} aria-labelledby="document-heading">{detail && <><div className="detail-top"><span className="sample-badge">Your document</span><button className="close" aria-label="Close document" onClick={() => dialog.current?.close()}>×</button></div><h2 id="document-heading">{detail.title}</h2><p className="subtitle">{detail.collection} · Added {displayDate(detail.created_at)}</p>{detail.original_filename && <p className="document-file-info">{detail.original_filename} · {detail.page_count} pages · {((detail.file_size_bytes ?? 0) / 1024 / 1024).toFixed(2)} MiB</p>}{detail.status === "uploaded" ? <div className="library-success">Your original PDF is stored privately. Text extraction is coming next.</div> : <div className="document-content">{detail.content}</div>}{detail.original_filename && <PdfViewer key={detail.id} id={detail.id} filename={detail.original_filename} />}</>}</dialog>
+    <dialog ref={dialog} className={detail?.original_filename ? "detail library-dialog pdf-document-dialog" : "detail library-dialog"} onClose={() => setDetail(null)} onClick={event => { if (event.target === event.currentTarget) { dialog.current?.close(); setDetail(null); } }} aria-labelledby="document-heading">{detail && <><div className="detail-top"><span className="sample-badge">Your document</span><button className="close" aria-label="Close document" onClick={() => dialog.current?.close()}>×</button></div><h2 id="document-heading">{detail.title}</h2><p className="subtitle">{detail.collection} · Added {displayDate(detail.created_at)}</p>{detail.original_filename && <p className="document-file-info">{detail.original_filename} · {detail.page_count} pages · {((detail.file_size_bytes ?? 0) / 1024 / 1024).toFixed(2)} MiB</p>}{detail.original_filename ? <DocumentProcessing key={`processing-${detail.id}`} document={detail} onUpdate={updateDocument} /> : <div className="document-content">{detail.content}</div>}{detail.original_filename && <PdfViewer key={`pdf-${detail.id}`} id={detail.id} filename={detail.original_filename} />}</>}</dialog>
   </>;
 }
