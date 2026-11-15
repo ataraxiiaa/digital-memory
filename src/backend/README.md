@@ -1,5 +1,65 @@
 # Backend checkpoints
 
+## Extraction checkpoint 3 - local layout detection
+
+Install optional dependencies from the workspace root:
+
+```powershell
+uv pip install --python .venv/Scripts/python.exe -r src/backend/requirements-layout.txt
+```
+
+The optional lock is constrained to the existing backend lock. To update it intentionally, run `uv pip compile src/backend/requirements-layout.in -c src/backend/requirements.txt --python .venv/Scripts/python.exe -o src/backend/requirements-layout.txt`.
+
+Run layout analysis on an explicitly selected local PDF, choosing fresh output paths:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.backend.services.pdf_layout tests/fixtures/attention.pdf --document-id 00000000-0000-0000-0000-000000000001 --output .cache/attention-layout-v1.json --preview .cache/attention-layout-v1.html
+```
+
+Open the HTML in a browser to inspect region boxes, labels, confidence scores, and per-page review warnings. It embeds rendered pages and requires no server. Both outputs contain source document content and belong in ignored local storage. Existing outputs are protected from overwrite. The example document ID is for local testing.
+
+Docling 2.150.1 runs the Heron layout model on CPU. The model repository is `docling-project/docling-layout-heron`, pinned to revision `8f39ad3c0b4c58e9c2d2c84a38465abf757272d8`. Initial execution downloads public model weights, while PDF inference runs locally with remote services disabled. Subsequent runs can use the cached model with `HF_HUB_OFFLINE=1`. Optional dependencies and model weights have a substantial disk/memory footprint; this checkpoint has not been evaluated on free hosting.
+
+`schemas/layout.py` defines separate layout annotations. `services/pdf_layout.py` maps Docling's one-based pages and coordinate origins into normalized top-left boxes. It retains the complete native extraction record and its citation offsets alongside the annotations. Detector labels and confidence are preserved, and unknown labels become reviewable regions. Detection order is not a guaranteed reading order.
+
+Tables, figures, equations, unknown content, missing pages, invalid boxes, and model confidence below 0.5 trigger explicit page review statuses. The 0.5 threshold is an initial review heuristic, not a calibrated accuracy guarantee. A page marked `detected` means detections were returned without these warnings. Native extraction status and layout review status are distinct fields.
+
+OCR, table-cell reconstruction, formula recognition, and figure interpretation are disabled at this checkpoint. Annotations identify regions requiring those later stages. Model boxes may be incomplete or overlap, and captions are not yet associated with figures. CPU/memory isolation, queued processing, persistence, and app integration remain future work.
+
+### Attention fixture observation
+
+The local 15-page run produced 167 text regions, 9 captions, 7 figure regions, 6 equation regions, and 4 tables. Tables were detected on pages 6, 8, 9, and 10. Equations were detected on pages 4 through 7. Figure regions occurred on pages 3, 4, 13, 14, and 15. Eleven pages require review. Region counts include subfigures and are not counts of numbered figures in the paper.
+
+Visual spot-checks on pages 4, 9, and 13 confirmed useful boxes around the attention diagrams, displayed equation, model-variation table, and attention visualization. Boundaries are approximate; the page 13 figure box also includes its heading. This single-document review is not a precision/recall benchmark. Adapter tests run offline without downloading models; the HTML renderer smoke test runs when optional dependencies are installed.
+
+## Extraction checkpoint 2 - native page text
+
+`services/pdf_extraction.py` provides `extract_pdf_text(data, document_id=...)` and a local CLI. It returns the versioned extraction contract with a source hash, tool versions, page dimensions, physical page numbers, and one text region per page. Each run and region receives a fresh ID. Text is preserved exactly as returned by pypdf, including whitespace, for citation offsets.
+
+From the workspace root, explicitly select a local PDF and a new JSON output path:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.backend.services.pdf_extraction tests/fixtures/attention.pdf --document-id 00000000-0000-0000-0000-000000000001 --output .cache/attention-extraction.json
+```
+
+The example UUID is a local test identifier. Add the fixture first and ensure the output parent directory exists. Output files are created exclusively, so choose a fresh filename on subsequent runs. The JSON contains document text and should be kept in ignored local storage. The CLI prints a status summary and exits with code 1 for input or output errors. Inspect the run/page statuses for partial extraction failures, which are saved as reviewable results.
+
+The extractor reuses the upload validator's 30 MiB and 1,000-page limits and rejects malformed, empty, and encrypted PDFs. Empty native output becomes `needs_review`; it does not automatically mean scanned content. Replacement characters and null characters also trigger review. A page extraction exception records a sanitized failure and processing continues for other pages. If all pages fail, the run is `failed`. Unreadable page geometry aborts the run because valid page references cannot be produced.
+
+This checkpoint supports native text only. OCR, table structure, figures, reading-order verification, background jobs, database persistence, and API/UI integration remain upcoming. Successful native extraction does not establish complete page coverage or correct column order. Coordinates and model confidence are unset. Parsing is synchronous and has no hard CPU or decompressed-memory isolation, so this CLI is currently intended for explicitly selected local test files. `tests/backend/test_pdf_extraction.py` checks actual in-memory PDFs and command-line behavior.
+
+## Extraction checkpoint 1 - data contract
+
+`schemas/extraction.py` defines validated, versioned extraction records. This checkpoint defines data shapes for later extraction and persistence.
+
+- `ExtractionRun` identifies the document, source SHA-256, extraction version, timezone-aware timestamp, tool versions, expected page count, and run status.
+- `ExtractionPage` preserves the one-based physical PDF page number, optional printed label, dimensions in PDF points, regions, and warnings. Pending pages are permitted during processing. Completed runs must account for every page.
+- `ExtractionRegion` records content type, extraction method, status, preserved text, optional coordinates, model confidence, and warnings. Confidence is a model output, not a validated accuracy score. Table cells and image artifacts will extend the contract when their extractors are introduced.
+- Bounding boxes use normalized coordinates from 0 to 1, measured from the top-left of the displayed page. Parser adapters must convert their coordinates to this convention. Coordinates may be absent for the initial text-only parser.
+- `CitationReference` identifies a document, extraction run, physical page, region, and end-exclusive Python character range. `resolve_citation` validates the reference and returns its exact text. Unicode offsets count Python string characters, not UTF-8 bytes or browser UTF-16 code units. Search normalization must preserve this original text separately.
+
+Run ` .\.venv\Scripts\python.exe -m pytest tests/backend/test_extraction_contract.py -q` from the workspace root. Tests cover Unicode citation round trips, invalid references, coordinates, and incomplete or warning-bearing results. If `tests/fixtures/attention.pdf` is present, an additional read-only check builds a pending page inventory from its page dimensions and source hash. This fixture check does not establish text, table, or figure extraction accuracy.
+
 We add one working layer at a time. Each checkpoint ends with a runnable result and checks before the next layer.
 
 1. **API foundation (implemented):** FastAPI application, `GET /health`, API documentation, and request-level tests.

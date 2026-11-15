@@ -1,0 +1,3 @@
+# Optional local layout analysis checkpoint
+-r requirements.in
+docling==2.150.1
