@@ -134,6 +134,14 @@ def test_run_stores_cited_suggestions_across_all_types(api):
         for m in data["mentions"])
 
 
+def test_bibliography_filter_is_forwarded_to_storage(api):
+    client, state = api
+    client.post(f"/documents/{DOC}/entities", headers=HEADERS)
+    state["calls"].clear()
+    assert client.get(f"/documents/{DOC}/entities?hide_bibliography=true", headers=HEADERS).status_code == 200
+    assert "/rest/v1/entity_mentions" in state["calls"]
+
+
 def test_schema_is_selectable_and_validated(api):
     client, state = api
     assert client.post(f"/documents/{DOC}/entities?schema=bogus", headers=HEADERS).status_code == 422

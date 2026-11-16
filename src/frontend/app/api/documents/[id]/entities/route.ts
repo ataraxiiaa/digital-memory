@@ -11,7 +11,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const source = request.nextUrl.searchParams;
   const query = new URLSearchParams();
   for (const [key, pattern] of [["limit", /^\d{1,3}$/], ["offset", /^\d{1,6}$/], ["label", /^[a-z]{3,20}$/],
-    ["status", /^(suggested|accepted|rejected)$/], ["min_score", /^(0|1|0?\.\d{1,3})$/]] as const) {
+    ["status", /^(suggested|accepted|rejected)$/], ["min_score", /^(0|1|0?\.\d{1,3})$/], ["hide_bibliography", /^true$/]] as const) {
     const value = source.get(key);
     if (value && pattern.test(value)) query.set(key, value);
   }

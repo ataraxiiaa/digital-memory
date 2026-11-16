@@ -155,3 +155,43 @@ def test_cli_supports_research_schema(tmp_path, monkeypatch):
     result = EntityReport.model_validate_json(output.read_text(encoding="utf-8"))
     assert result.label_schema_version == "research-v1"
     assert result.passages[0].mentions[0].label == "model"
+
+
+from backend.services.entity_mentions import looks_like_bibliography, refine_span
+
+
+@pytest.mark.parametrize("label,text,expected", [
+    ("person", "Smith et al.", "Smith"), ("person", "Lee et al", "Lee"), ("person", "Larry Page", "Larry Page"),
+    ("date", "2017", "2017"), ("date", "3 March 2024", "3 March 2024"), ("date", "next Friday", "next Friday"),
+    ("date", "7:30 pm", None), ("date", "6 am", None), ("date", "3.5 days", None), ("date", "12 hours", None),
+    ("date", "28.4", None), ("event", "7:30 pm show", "7:30 pm show"), ("location", "Lahore", "Lahore")])
+def test_cleanup_rules_keep_offsets_exact(label, text, expected):
+    sentence = f"Note: {text} here."
+    start = sentence.index(text)
+    result = refine_span(label, sentence, start, start + len(text))
+    assert (None if result is None else sentence[result[0]:result[1]]) == expected
+
+
+def test_filtered_candidates_are_counted_separately_from_invalid_ones():
+    text = "Smith et al. met at 7:30 pm, 3.5 days after 2017."
+    source = report_for([text])
+    def at(value):
+        return candidate(value, text.index(value), text.index(value) + len(value))
+    model = FakeModel({"entities": {"person": [at("Smith et al.")],
+        "date": [at("7:30 pm"), at("3.5 days"), at("2017")]}})
+    result = extract_entity_mentions(source, model).passages[0]
+    assert [(m.label, m.text) for m in result.mentions] == [("person", "Smith"), ("date", "2017")]
+    assert result.filtered_candidate_count == 2 and result.rejected_candidate_count == 0
+    assert result.status == "completed"
+    person = result.mentions[0]
+    assert source.native_extraction.resolve_citation(person.citation) == "Smith"
+
+
+def test_bibliography_like_passages_are_flagged_not_dropped():
+    text = "Vaswani, A. Attention is all you need. In Proceedings of NeurIPS, 2017."
+    assert looks_like_bibliography(text)
+    assert not looks_like_bibliography("The conference on machine learning is in July 2026.")
+    result = extract_entity_mentions(report_for([text]),
+        FakeModel({"entities": {"person": [candidate("Vaswani", 0, 7)]}})).passages[0]
+    assert result.mentions and "Looks like a bibliography entry" in result.mentions[0].warnings
+    assert result.status == "needs_review"

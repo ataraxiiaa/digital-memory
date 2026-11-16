@@ -40,6 +40,8 @@ class PassageEntities(ExtractionRecord):
     status: Literal["completed", "needs_review", "failed"]
     mentions: tuple[EntityMention, ...] = ()
     rejected_candidate_count: int = Field(default=0, ge=0)
+    # Valid model output dropped by deterministic cleanup rules (see entity_mentions.refine_span).
+    filtered_candidate_count: int = Field(default=0, ge=0)
     warnings: tuple[str, ...] = ()
 
 
@@ -48,7 +50,7 @@ class EntityReport(ExtractionRecord):
     native_extraction_id: UUID
     ocr_extraction_id: UUID | None = None
     source_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    algorithm_version: Literal["entity-mentions-v1"] = "entity-mentions-v1"
+    algorithm_version: Literal["entity-mentions-v1", "entity-mentions-v2"] = "entity-mentions-v2"
     label_schema_version: Literal["legacy", "core-v1", "research-v1", "full-v1", "custom"] = "legacy"
     model_repository: str
     model_revision: str

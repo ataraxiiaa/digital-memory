@@ -57,6 +57,7 @@ export function EntityReview({ document }: { document: DocumentDetail }) {
   const [offset, setOffset] = useState(0);
   const [status, setStatus] = useState<ReviewStatus | "">("suggested");
   const [label, setLabel] = useState<Label | "">("");
+  const [hideBibliography, setHideBibliography] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [report, setReport] = useState<Report | null>(null);
@@ -71,6 +72,7 @@ export function EntityReview({ document }: { document: DocumentDetail }) {
     const query = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
     if (status) query.set("status", status);
     if (label) query.set("label", label);
+    if (hideBibliography) query.set("hide_bibliography", "true");
     try {
       const response = await fetch(`/api/documents/${document.id}/entities?${query}`, {
         headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal,
@@ -82,7 +84,7 @@ export function EntityReview({ document }: { document: DocumentDetail }) {
     } catch (failure) {
       if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : "Could not load entity suggestions.");
     } finally { if (!controller.signal.aborted && !quiet) setLoading(false); }
-  }, [token, document.id, offset, status, label, signOut]);
+  }, [token, document.id, offset, status, label, hideBibliography, signOut]);
 
   useEffect(() => { void load(); return () => request.current?.abort(); }, [load]);
   useEffect(() => { setReport(null); setOpen(null); setOffset(0); }, [document.processing_run_id]);
@@ -169,6 +171,7 @@ export function EntityReview({ document }: { document: DocumentDetail }) {
           <option value="suggested">Awaiting review</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option><option value="">All</option></select></label>
         <label>Type <select value={label} onChange={event => { setLabel(event.target.value as Label | ""); setOffset(0); }}>
           <option value="">All types</option>{ENTITY_LABELS.map(item => <option key={item} value={item}>{item}{counts.by_label[item] ? ` (${counts.by_label[item]})` : ""}</option>)}</select></label>
+        <label><input type="checkbox" checked={hideBibliography} onChange={event => { setHideBibliography(event.target.checked); setOffset(0); }} /> Hide reference-list matches</label>
       </div>
       {loading && <p role="status">Loading suggestions…</p>}
       {!loading && data && data.mentions.length === 0 && <p>No suggestions match these filters.</p>}

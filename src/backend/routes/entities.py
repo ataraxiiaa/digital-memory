@@ -116,11 +116,13 @@ async def list_entities(
     label: Annotated[str | None, Query(pattern=r"^[a-z]{3,20}$")] = None,
     status: Annotated[str | None, Query(pattern=r"^(suggested|accepted|rejected)$")] = None,
     min_score: Annotated[float | None, Query(ge=0, le=1)] = None,
+    hide_bibliography: bool = False,
 ) -> EntityPage:
     if await store.get(document_id) is None:
         raise HTTPException(404, "Document not found")
     return await entities.page(document_id, limit=limit, offset=offset,
-        label=label, status=status, min_score=min_score)
+        label=label, status=status, min_score=min_score,
+        hide_bibliography=hide_bibliography)
 
 
 @router.patch("/{document_id}/entities/{run_id}/{mention_id}", response_model=StoredMention)

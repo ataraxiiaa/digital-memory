@@ -3,6 +3,7 @@
 import argparse
 from importlib.metadata import version
 import math
+import re
 from pathlib import Path
 from uuid import uuid5
 
@@ -34,8 +35,46 @@ FULL_LABELS = {**RESEARCH_LABELS, **TIMELINE_LABELS}
 LABEL_SCHEMAS = {"core-v1": CORE_LABELS, "research-v1": RESEARCH_LABELS, "full-v1": FULL_LABELS}
 DEFAULT_LABEL_SCHEMA = "full-v1"
 LABELS = LABEL_SCHEMAS[DEFAULT_LABEL_SCHEMA]
+ALGORITHM_VERSION = "entity-mentions-v2"
 CHUNK_SIZE = 128
 CHUNK_OVERLAP = 32
+
+
+_ET_AL = re.compile(r"\s+et\.?\s+al\.?$", re.IGNORECASE)
+_CLOCK_TIME = re.compile(r"^\d{1,2}(:\d{2})?\s*([ap]\.?m\.?)$|^\d{1,2}:\d{2}$", re.IGNORECASE)
+_DURATION = re.compile(r"^(\d+(\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+"
+                       r"(second|minute|hour|day|week|month|year)s?$", re.IGNORECASE)
+_DECIMAL = re.compile(r"^\d+\.\d+$")
+_BIBLIOGRAPHY = re.compile(r"arxiv|\bcorr\b|in proceedings|proceedings of|pp\.|journal of|preprint", re.IGNORECASE)
+_YEAR = re.compile(r"\b(19|20)\d{2}\b")
+
+
+class _Filtered(Exception):
+    """A valid model span removed by a documented cleanup rule."""
+
+
+def refine_span(label: str, text: str, start: int, end: int) -> tuple[int, int] | None:
+    """Apply deterministic, documented cleanups; None drops the span.
+
+    Person names lose a trailing "et al." (the citation convention is not part of a
+    name). Dates drop clock times, durations, and bare decimals: scores like 28.4
+    and spans like "3.5 days" are not calendar dates. Offsets always stay exact.
+    """
+    span = text[start:end]
+    if label == "person":
+        trimmed = _ET_AL.sub("", span)
+        if not trimmed.strip():
+            return None
+        return start, start + len(trimmed)
+    if label == "date" and (_CLOCK_TIME.match(span.strip()) or _DURATION.match(span.strip())
+                            or _DECIMAL.match(span.strip())):
+        return None
+    return start, end
+
+
+def looks_like_bibliography(text: str) -> bool:
+    """Reference-list entries mix years with venue words and generate noisy mentions."""
+    return len(_YEAR.findall(text)) >= 1 and len(_BIBLIOGRAPHY.findall(text)) >= 1
 
 
 def load_model():
@@ -76,8 +115,10 @@ def extract_entity_mentions(report: LayoutReport, model, *, threshold: float = .
             entities = raw["entities"]
             if not isinstance(entities, dict):
                 raise ValueError("Invalid model response")
+            bibliography = looks_like_bibliography(passage.text)
             mentions = []
             rejected = 0
+            filtered = 0
             seen = set()
             for label, candidates in entities.items():
                 if label not in labels or not isinstance(candidates, list):
@@ -93,11 +134,19 @@ def extract_entity_mentions(report: LayoutReport, model, *, threshold: float = .
                                 or type(score) not in (int, float) or not math.isfinite(score)
                                 or not threshold <= score <= 1):
                             raise ValueError("Invalid span or score")
+                        refined = refine_span(label, passage.text, start, end)
+                        if refined is None:
+                            raise _Filtered
+                        start, end = refined
+                        text = passage.text[start:end]
                         citation = passage.citation.model_copy(update={
                             "start_char": passage.citation.start_char + start,
                             "end_char": passage.citation.start_char + end})
                         if runs[citation.extraction_id].resolve_citation(citation) != text:
                             raise ValueError("Invalid citation")
+                    except _Filtered:
+                        filtered += 1
+                        continue
                     except (KeyError, TypeError, ValueError):
                         rejected += 1
                         continue
@@ -105,12 +154,13 @@ def extract_entity_mentions(report: LayoutReport, model, *, threshold: float = .
                     if key in seen:
                         continue
                     seen.add(key)
-                    identity = f"entity-mentions-v1|{MODEL_REVISION}|{library_version}|{threshold}|{labels}|{CHUNK_SIZE}|{CHUNK_OVERLAP}|{label}|{start}|{end}"
+                    identity = f"{ALGORITHM_VERSION}|{MODEL_REVISION}|{library_version}|{threshold}|{labels}|{CHUNK_SIZE}|{CHUNK_OVERLAP}|{label}|{start}|{end}"
                     mentions.append(EntityMention(id=uuid5(passage.id, identity),
                         passage_id=passage.id, label=label, text=text,
                         start_char=start, end_char=end, citation=citation,
                         source_sha256=passage.source_sha256, score=score,
                         warnings=tuple(dict.fromkeys([*passage.warnings,
+                            *(["Looks like a bibliography entry"] if bibliography else []),
                             *(["Source passage requires review"] if passage.review_required else [])]))))
             labels_by_span = {}
             for mention in mentions:
@@ -127,10 +177,12 @@ def extract_entity_mentions(report: LayoutReport, model, *, threshold: float = .
                 warnings.append("Source passage requires review")
             if rejected:
                 warnings.append("Invalid model candidates were rejected")
+            if bibliography:
+                warnings.append("Looks like a bibliography entry; suggestions here are often noise")
             results.append(PassageEntities(passage_id=passage.id,
                 status="needs_review" if warnings else "completed",
                 mentions=tuple(sorted(mentions, key=lambda item: (item.start_char, item.end_char, item.label))),
-                rejected_candidate_count=rejected, warnings=tuple(dict.fromkeys(warnings))))
+                rejected_candidate_count=rejected, filtered_candidate_count=filtered, warnings=tuple(dict.fromkeys(warnings))))
         except Exception:
             # Keep failures distinct from successful extraction with zero mentions.
             # Do not put provider exceptions (which can contain source text) in reports.

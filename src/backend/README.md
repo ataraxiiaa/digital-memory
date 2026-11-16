@@ -124,6 +124,18 @@ There were no boundary-only timeline errors and no failed passages. The eight ti
 
 Interpret this cautiously. The set is small, one author wrote both the policy and the annotations, the sentences are short and clean, and no real-world scan or paper text is included. The 100% recall is a ceiling for easy cases, not an expectation for messy documents. A second annotator and longer, noisier passages should come before relying on these numbers. Reviewing suggestions in the entity panel remains required.
 
+### Phase 0 hardening
+
+**Review decisions survive re-runs.** `202611170002_carry_entity_reviews.sql` makes a new run inherit the latest earlier accept/reject/retype decision for the same document, exact source span and model label. A re-extracted document has new region IDs, so a changed source cannot inherit decisions. A mention with a different label stays awaiting review. This was verified against the live database in a transaction that was rolled back.
+
+**Cleanup rules (`entity-mentions-v2`).** `refine_span` removes a trailing `et al.` from person names. It drops clock times (`7:30 pm`), durations (`3.5 days`) and bare decimals (`28.4`) from dates, because they are not calendar dates. Offsets stay exact and citations still resolve. Dropped spans are counted as `filtered_candidate_count`, separately from invalid model output. Passages that look like reference-list entries (a year plus words such as `arXiv`, `Proceedings of`, `pp.`) get a "Looks like a bibliography entry" warning instead of being dropped, and the review panel has a **Hide reference-list matches** filter (`hide_bibliography=true`).
+
+On the Attention paper, v2 produced 784 suggestions (819 before): 35 non-date spans were filtered, no `et al.` remains in a name, and 323 of the 784 (41%, including 164 of 204 person mentions) are flagged as bibliography-like. On the timeline set (`.cache/timeline-label-evaluation-v2.json`), timeline precision rose from 91.4% to 94.4% at 100% recall, and non-timeline F1 from 75.0% to 80.6%. **These rules were written after seeing that set's errors, so the new numbers are no longer held-out and overstate real performance.** Use a second annotator's sheet or fresh notes for an honest figure.
+
+**Second annotator.** `python tests/backend/annotation_agreement.py sheet --output .cache/timeline-sheet.json` writes the same 41 notes with empty annotations and the policy. After someone fills it in without seeing the reference or model output, `python tests/backend/annotation_agreement.py compare .cache/timeline-sheet.json` reports per-label agreement and lists every disagreement, which shows where the policy is ambiguous.
+
+**Live isolation check.** `python -m src.backend.check_isolation DOCUMENT_ID` asks for two users' access tokens (hidden). User A must own an extracted document with an entity run. It confirms A can read their data (so empty results cannot pass vacuously). It confirms B and an unauthenticated caller can read no rows from `documents`, `document_extractions`, `entity_runs` or `entity_mentions`, cannot download the PDF, and cannot call the start/finish/review functions on A's data, and that A's run is unchanged afterwards. Use test accounts and documents only.
+
 Not yet addressed: bibliography text still produces person, organization, and event noise, and the same entity is not merged across mentions. Identity resolution and relationships are the next stage.
 
 ## Knowledge graph checkpoint 1 - source passages

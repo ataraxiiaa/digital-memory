@@ -86,7 +86,8 @@ class SupabaseEntityStore:
             raise StorageUnavailable("Invalid entity storage response") from None
 
     async def page(self, document_id: UUID, *, limit: int, offset: int, label: str | None,
-                   status: str | None, min_score: float | None) -> EntityPage:
+                   status: str | None, min_score: float | None,
+                   hide_bibliography: bool = False) -> EntityPage:
         run = await self.latest_run(document_id)
         if run is None:
             return EntityPage(run=None, counts=EntityCounts(), total=0, offset=offset, limit=limit, mentions=[])
@@ -108,6 +109,8 @@ class SupabaseEntityStore:
             params["label"] = f"eq.{label}"
         if status:
             params["review_status"] = f"eq.{status}"
+        if hide_bibliography:
+            params["warnings"] = 'not.cs.{"Looks like a bibliography entry"}'
         if min_score is not None:
             params["score"] = f"gte.{min_score}"
         response = await self._send("GET", "entity_mentions", params=params, headers={"Prefer": "count=exact"})
