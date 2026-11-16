@@ -497,3 +497,37 @@ uv pip compile src/backend/requirements.in --python .\.venv\Scripts\python.exe -
 `GET /documents/{document_id}/file` requires the same bearer authentication as other document routes. It reads the owned document row before accessing private Storage and requires the canonical `<user-id>/<document-id>/original.pdf` path. Missing, hidden, text-only, or mismatched paths return 404 without fetching the object. Storage authentication expiry returns 401, inaccessible/missing objects return 404, and service failures return 503. Oversized or non-PDF stored bytes return 502.
 
 The successful response returns original bytes as `application/pdf`, with inline Content-Disposition, UTF-8 filename encoding, no-store, and nosniff headers. No signed or public URL is issued. The backend buffers at most 30 MiB before responding; it does not implement range requests. The frontend fetches a full file through its server proxy before displaying a temporary browser-local URL. No migration or text extraction is needed for viewing. Tests mock Storage and verify byte preservation, ownership/path checks, content headers, authentication, and failure handling.
+
+
+## Entity identity (Phase 2)
+
+Accepted mentions become per-user **canonical entities** that span documents. Apply `202611180002_entity_identity.sql` (`python -m src.backend.supabase.migrate`) first. It was validated, not applied, by the author: `tests/backend/check_entity_identity_live.py` runs the migration and 38 checks against the real database inside a transaction that is rolled back (grouping, merge, undo, split, link, rename, dismiss, a re-run, a second user, and anon).
+
+**Model.** `entities` (type, canonical name, status `suggested`/`confirmed`/`merged`), `entity_links` (one accepted mention to one entity, with method), `entity_merges` (history with the moved links, so a merge can be undone) and `merge_suggestions` (pair, kind, score, ambiguous flag, reason, status). All four have row-level security with select-own and no direct writes. Writes go through owner-checked `security definer` functions: `refresh_entity_links`, `apply_entity_resolution`, `merge_entities`, `undo_merge`, `link_mention`, `split_mention`, `rename_entity`, `confirm_entity`, `dismiss_merge_suggestion`. Only **accepted** mentions of a document's **latest** completed run are linked; their effective type is `coalesce(reviewed_label, label)`. A mention never joins an entity of another type, and entities of different types never merge. When a document is re-run, `refresh_entity_links` moves existing links (including manual ones) onto the equivalent mention of the new run, drops links whose mention was rejected, retyped or no longer present, and deletes unconfirmed entities left empty.
+
+**Policy.** Nothing merges without a person. `POST /entities/resolve` only (1) links an accepted mention to an existing entity when its normalized text equals one of that entity's spellings (if several entities qualify it is left unlinked and counted as `skipped_ambiguous`), (2) groups the remaining identical-normalized same-type mentions into a new entity with status `suggested`, and (3) refreshes merge suggestions. Everything fuzzy is a suggestion carrying a reason and example mentions with their citations. Decided suggestions stay decided across later resolves.
+
+| Type | Auto-grouped when | Suggested for merging |
+| --- | --- | --- |
+| person | Same name after ignoring case, accents, titles (Dr., Prof.), suffixes (Jr.), `et al.` and word order (`Page, Larry` = `Larry Page`) | Initial or missing middle name: `L. Page`, `L Page`, `Larry E. Page` vs `Larry Page` (score 0.8 to 0.85). Surname only: `Page` vs `Larry Page` (weak, 0.4, never linked automatically) |
+| organization | Same name after ignoring legal suffixes (Inc., Corp., Ltd, LLC, GmbH) | One name extending the other (`Stanford` / `Stanford University`, but also `Google` / `Google Brain`): weak, 0.45, with a note that it may be a part of the organization |
+| location, date, event, project, model, method, dataset, component | Same name after ignoring case, accents and punctuation (`Self-Attention` = `self attention`) | Nothing |
+
+Two full first names that differ (`Larry` / `Lisa`, `Michael` / `Mike`) are a conflict and never suggested. If one name fits two entities that conflict with each other, as `L. Page` does for `Larry Page` and `Lisa Page`, each suggestion is flagged **ambiguous** and its reason names the rivals. Ambiguity flags are computed within one type.
+
+| Route | Purpose |
+| --- | --- |
+| `POST /entities/resolve` | Refresh links, group new entities, refresh suggestions |
+| `GET /entities?type=&q=&status=&limit=&offset=` | Entities with mention and document counts and spellings (merged ones hidden) |
+| `GET /entities/{id}` | One entity with every supporting mention, citation and merge history |
+| `GET /entities/suggestions?status=pending&min_score=` | Suggestions with reason and up to three example mentions per side |
+| `POST /entities/suggestions/{id}/confirm` (optional `{"keep_id"}`) / `.../dismiss` | Merge (survivor defaults to the entity with more mentions) or dismiss |
+| `POST /entities/merge`, `POST /entities/merges/{id}/undo` | Manual merge of two same-type entities, and undo |
+| `POST /entities/mentions/split`, `POST /entities/{id}/link` | Move a mention into a new entity (this is how a mention is unlinked), or into another entity of the same type |
+| `PATCH /entities/{id}`, `POST /entities/{id}/confirm` | Rename (also confirms) or confirm |
+
+The workspace has a new **Entities** view: update entities, review possible merges with reasons and source text, merge into either side or mark "not the same", open an entity to rename, split off a mention, merge another entity into it, and undo a merge.
+
+**Measured, with limits.** `tests/fixtures/name_variant_pairs.json` has 56 authored pairs (written before measuring; run `python tests/backend/evaluate_name_matching.py`). Persons: 22 of 24 same-person pairs are suggested for merging (91.7% recall), and none of the 13 different-person pairs is (no false merges); the 2 misses are nickname pairs (`Michael`/`Mike`, `Robert`/`Bob`), which this matcher does not handle. All 4 surname-only or initial-only "possible" pairs got suggestions, as designed. Organizations: 4 of 5 same pairs suggested strongly (`Stanford`/`Stanford University` is weak), no strong false merges, but `Google`/`Google Brain` and `Apple Inc.`/`Apple Records` get weak suggestions that a reviewer should reject. One pair (`Mary-Jane Watson`/`Mary Watson`) was merged in the first run and fixed by keeping hyphenated given names whole; it was changed after seeing that result, so it is not held out. The set is small, written by the author of the matcher, and covers Western-style names with a few transliterations. It says nothing about names with no stable surname position, single-name people, or non-Latin scripts.
+
+**Known limits.** Aliases are exact spellings of linked mentions, so a split entity that shares a spelling with another entity leaves later identical mentions unlinked until someone links them. Undoing a merge restores the links recorded at merge time; links created since stay with the surviving entity. Resolution compares every entity pair of a type, which is fine for thousands of entities but not for hundreds of thousands. `POST /entities/resolve` is synchronous. Suggestions are only as good as the accepted mentions: a wrongly accepted mention becomes a wrong entity until a person splits it.
