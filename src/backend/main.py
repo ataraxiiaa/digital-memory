@@ -8,6 +8,7 @@ from backend.schemas.health import HealthResponse
 from backend.routes.documents import router as documents_router
 from backend.routes.entities import router as entities_router
 from backend.routes.text_notes import router as text_notes_router
+from backend.routes.entity_graph import router as entity_graph_router
 from backend.routes.processing import router as processing_router
 from backend.storage.documents import StorageUnavailable
 
@@ -23,6 +24,7 @@ app.include_router(documents_router)
 app.include_router(processing_router)
 app.include_router(entities_router)
 app.include_router(text_notes_router)
+app.include_router(entity_graph_router)
 
 
 @app.middleware("http")

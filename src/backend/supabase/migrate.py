@@ -83,6 +83,21 @@ def verify_documents(connection) -> None:
     """).fetchone()
     if entity != (True, True, True, False, False, False, True, False):
         raise ValueError("Entity ownership or review permissions failed verification")
+    if connection.execute("select to_regclass('public.entities')").fetchone()[0] is not None:
+        identity = connection.execute("""
+            select (select count(*) from pg_class where relrowsecurity and oid = any(array[
+                       'public.entities'::regclass, 'public.entity_links'::regclass,
+                       'public.entity_merges'::regclass, 'public.merge_suggestions'::regclass])),
+                   has_table_privilege('authenticated', 'public.entities', 'SELECT'),
+                   has_table_privilege('authenticated', 'public.entities', 'INSERT'),
+                   has_table_privilege('authenticated', 'public.entity_links', 'UPDATE'),
+                   has_table_privilege('anon', 'public.merge_suggestions', 'SELECT'),
+                   has_function_privilege('authenticated', 'public.merge_entities(uuid,uuid)', 'EXECUTE'),
+                   has_function_privilege('anon', 'public.merge_entities(uuid,uuid)', 'EXECUTE'),
+                   has_function_privilege('authenticated', 'public.latest_entity_run_id(uuid)', 'EXECUTE')
+        """).fetchone()
+        if identity != (4, True, False, False, False, True, False, False):
+            raise ValueError("Entity identity ownership or function permissions failed verification")
 
 
 def apply_migrations(connection) -> list[str]:

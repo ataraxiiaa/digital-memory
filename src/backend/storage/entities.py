@@ -38,6 +38,8 @@ class SupabaseEntityStore:
                 code = None
             if code == "P0002":
                 raise HTTPException(404, "Not found")
+            if code == "22023":
+                raise HTTPException(422, "That change is not allowed.")
             if code == "55000":
                 raise HTTPException(409, "Entity extraction is already running for this document.")
             raise StorageUnavailable("Entity storage request failed")
