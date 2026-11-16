@@ -1,0 +1,3 @@
+# Optional entity extraction, preserving the OCR checkpoint dependencies.
+-r requirements-ocr.in
+gliner2==2.1.0

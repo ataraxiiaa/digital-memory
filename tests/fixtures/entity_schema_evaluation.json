@@ -1,0 +1,29 @@
+{
+  "annotation_policy": "Exact source spans. Include Project or Operation prefixes in initiative names. Models are named architectures, methods are named algorithms or techniques, datasets are named data or benchmark collections, and components are architecture parts. Preserve each occurrence. Ambiguous names require explicit context for a type. These synthetic annotations were authored before running either configuration.",
+  "cases": [
+    {"text":"Nadia approved the budget for Project Marigold.","entities":{"person":["Nadia"],"project":["Project Marigold"]}},
+    {"text":"Our payroll migration initiative is called Birchwood.","entities":{"project":["Birchwood"]}},
+    {"text":"Operation Skylark is our warehouse expansion initiative.","entities":{"project":["Operation Skylark"]}},
+    {"text":"Project Tidepool is paused. Project Tidepool needs approval.","entities":{"project":["Project Tidepool","Project Tidepool"]}},
+    {"text":"The encoder transforms input and the decoder produces output.","entities":{"component":["encoder","decoder"]}},
+    {"text":"The Transformer architecture includes an encoder and a decoder.","entities":{"model":["Transformer"],"component":["encoder","decoder"]}},
+    {"text":"BERT was evaluated on SQuAD.","entities":{"model":["BERT"],"dataset":["SQuAD"]}},
+    {"text":"ResNet was trained using ImageNet.","entities":{"model":["ResNet"],"dataset":["ImageNet"]}},
+    {"text":"We used beam search to generate the final sequence.","entities":{"method":["beam search"]}},
+    {"text":"Dropout reduces overfitting during training.","entities":{"method":["Dropout"]}},
+    {"text":"The embedding layer feeds the attention head.","entities":{"component":["embedding layer","attention head"]}},
+    {"text":"ByteNet and ConvS2S are model architectures.","entities":{"model":["ByteNet","ConvS2S"]}},
+    {"text":"The model uses scaled dot-product attention.","entities":{"method":["scaled dot-product attention"]}},
+    {"text":"CIFAR-10 is the dataset used in this experiment.","entities":{"dataset":["CIFAR-10"]}},
+    {"text":"Leila at Northwind Labs reviewed Project Firefly.","entities":{"person":["Leila"],"organization":["Northwind Labs"],"project":["Project Firefly"]}},
+    {"text":"Project Snowdrop will evaluate BERT on SQuAD.","entities":{"project":["Project Snowdrop"],"model":["BERT"],"dataset":["SQuAD"]}},
+    {"text":"Google researchers used an LSTM with beam search.","entities":{"organization":["Google"],"model":["LSTM"],"method":["beam search"]}},
+    {"text":"Our named initiative, Lantern, will update the decoder.","entities":{"project":["Lantern"],"component":["decoder"]}},
+    {"text":"Review the invoice and schedule tomorrow's meeting.","entities":{}},
+    {"text":"I saw a robin and a cedar tree in the garden.","entities":{}},
+    {"text":"Nimbus was mentioned. Its meaning was never explained.","entities":{}},
+    {"text":"🙂 Notes:\nProject Meadowbrook needs a new encoder.","entities":{"project":["Project Meadowbrook"],"component":["encoder"]}},
+    {"text":"Stanford University hosted Yusuf for a budget discussion.","entities":{"organization":["Stanford University"],"person":["Yusuf"]}},
+    {"text":"The encoder uses dropout. The decoder also uses dropout.","entities":{"component":["encoder","decoder"],"method":["dropout","dropout"]}}
+  ]
+}

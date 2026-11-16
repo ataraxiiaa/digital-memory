@@ -1,0 +1,10 @@
+[
+  {"text":"Sara Khan met Omar Ali at Acme Labs to discuss Project Atlas.","entities":{"person":["Sara Khan","Omar Ali"],"organization":["Acme Labs"],"project":["Project Atlas"]}},
+  {"text":"Microsoft assigned Alice Chen to Project Horizon.","entities":{"person":["Alice Chen"],"organization":["Microsoft"],"project":["Project Horizon"]}},
+  {"text":"The budget was approved yesterday. Update the task list tomorrow.","entities":{}},
+  {"text":"Apple is the company supplying equipment. Maya Patel approved the receipt.","entities":{"person":["Maya Patel"],"organization":["Apple"]}},
+  {"text":"I bought an apple and an orange. No project was discussed.","entities":{}},
+  {"text":"Dr. Ayesha Malik from Stanford University reviewed Project Beacon.","entities":{"person":["Ayesha Malik"],"organization":["Stanford University"],"project":["Project Beacon"]}},
+  {"text":"Project Atlas is delayed. Acme Labs will send a revised estimate.","entities":{"organization":["Acme Labs"],"project":["Project Atlas"]}},
+  {"text":"🙂 Budget meeting:\nSara Khan approved the work.\nThe project name has not been decided.","entities":{"person":["Sara Khan"]}}
+]

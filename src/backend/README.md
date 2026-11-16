@@ -1,5 +1,89 @@
 # Backend checkpoints
 
+## Knowledge graph checkpoint 2 - local entity suggestions
+
+`services/entity_mentions.py` runs GLiNER2 locally on exact source passages. The default `research-v1` schema covers person, organization, project, model, method, dataset, and component. It uses `fastino/gliner2-base-v1`, pinned to revision `f9634218e53580c56edf0de97ca1a7d3f1c2354e`, and `gliner2==2.1.0`. The optional dependency lock preserves the OCR checkpoint versions. Our installed PyTorch is CPU-only and this checkpoint explicitly uses CPU inference.
+
+```powershell
+uv pip install --python .venv/Scripts/python.exe -r src/backend/requirements-entities.txt
+.\.venv\Scripts\python.exe -m src.backend.services.entity_mentions .cache/attention-ocr-v2.json --output .cache/attention-entities-research-v1.json
+```
+
+The input is a saved `LayoutReport`, not the paginated passage response. First use downloads model files from Hugging Face; source text stays on the machine. Cached weights support subsequent local inference. Choose a new output filename; existing reports are never overwritten. Results remain local JSON for this learning checkpoint. There is no entity API, database persistence, or frontend review screen yet. Existing ingestion and extraction endpoints remain unchanged.
+
+GLiNER2 scans overlapping 128-word windows with 32-word overlap and batch size one. Window offsets map back to unchanged passage text. This avoids simply truncating longer passages, although context across passage boundaries remains unavailable. Each candidate must have a supported label, finite score at or above the configurable threshold (default `0.5`), valid character offsets, and text exactly matching both the passage slice and original extraction citation. Invalid candidates are counted and rejected; malformed responses and inference failures are recorded separately from successful empty results. Per-passage status and warnings make partial failures visible. The CLI saves partial reports but exits nonzero if any passage failed.
+
+All accepted outputs remain **suggestions**. Model scores are not calibrated probabilities. Stable mention IDs include passage, span, label, model revision, library version, label schema, threshold, and window configuration. Reports retain document/run IDs and source hash. OCR and other source warnings remain attached. Repeated mentions stay separate; there is no identity merging, relationship inference, automatic acceptance, or correction of original text.
+
+Run deterministic validation tests normally. For an opt-in real-model check over eight annotated synthetic notes:
+
+```powershell
+$env:DIGITAL_MEMORY_RUN_ENTITY_TESTS = "1"
+.\.venv\Scripts\python.exe -m pytest tests/backend/test_entity_mentions_live.py -q -s
+Remove-Item Env:DIGITAL_MEMORY_RUN_ENTITY_TESTS
+```
+
+The evaluation writes exact-span-and-label precision/recall and missed/extra spans to `.cache/entity-synthetic-evaluation.json`, plus cited suggestions to `.cache/entity-synthetic-mentions.json`. It checks every produced citation, reports accuracy without inventing a benchmark threshold, and includes names, organizations, named projects, ambiguous fruit/company wording, generic tasks, Unicode, and line breaks. This small development set does not establish general accuracy or satisfy the eventual 20-run product assessment. Direct note ingestion still needs a document-level citation adapter; these synthetic notes use PDF-style extraction records only as test inputs.
+
+The initial real-model evaluation returned 15 suggestions for 15 annotated mentions: 13 matched exact spans and labels, giving 86.7% precision and recall. Two boundary differences accounted for the errors: `Horizon` versus `Project Horizon`, and inclusion of `Dr.` in `Ayesha Malik`. Every returned citation resolved exactly. These results are a development observation, not a claim of production readiness.
+
+The Attention paper also exposes a domain limitation: the project label incorrectly includes generic terms such as `encoder` and `decoder`, sometimes with high scores. Raising the score threshold alone would not solve this. Project suggestions require explicit review and a broader annotated evaluation before graph promotion; this checkpoint never promotes any mention automatically. Citation correctness verifies the quoted evidence, not the correctness of the entity label.
+
+The saved paper run, `.cache/attention-entities-v2.json`, contains 479 suggested mentions across 93 passages: 204 person, 133 organization, and 142 project predictions. Four invalid candidates were rejected, zero passages failed, and all 479 remaining citations were independently resolved against the original native/OCR extraction strings. Counts include repeated occurrences and OCR/native duplicates; they are not unique graph entities or verified label totals.
+
+### Project-label evaluation
+
+`tests/fixtures/project_labels.json` contains 40 authored synthetic notes split into 20 development and 20 held-out evaluation cases. Each split includes ten cases without a named project. Annotations specify exact name boundaries, include `Project` or `Operation` when part of a name, and cover repeated occurrences. Technical components, model names, organizations, generic tasks, and ambiguous references have empty project annotations. These annotations were authored for development and still benefit from independent human review.
+
+`tests/backend/evaluate_project_labels.py` compares the original description with two clearer descriptions on development cases. It selects by exact-span F1, then precision, then configuration order. The evaluation phase reads that saved selection and compares it with the baseline on held-out cases. Model revision, threshold `0.5`, window settings, and person/organization descriptions stay fixed across experiments. Every emitted citation is checked. Reports include individual false positives, missed spans, inference failures, and counts for the other labels.
+
+```powershell
+.\.venv\Scripts\python.exe tests/backend/evaluate_project_labels.py --phase development --output .cache/project-label-development-v1.json
+.\.venv\Scripts\python.exe tests/backend/evaluate_project_labels.py --phase evaluation --development-report .cache/project-label-development-v1.json --output .cache/project-label-evaluation-v1.json
+```
+
+Choose new output filenames for repeat runs. The extractor accepts a complete `labels` description mapping for reproducible experiments and records it in the report and mention identities.
+
+Results recorded on November 16, 2026 with the pinned model and library follow.
+
+| Split | Description | Correct / predicted / expected | Precision | Recall | F1 |
+| --- | --- | --- | --- | --- | --- |
+| Development | Original | 12 / 20 / 13 | 60.0% | 92.3% | 72.7% |
+| Development | Explicit project definition | 13 / 21 / 13 | 61.9% | 100.0% | 76.5% |
+| Development | Named initiative definition | 13 / 19 / 13 | 68.4% | 100.0% | 81.3% |
+| Held-out | Original | 12 / 21 / 12 | 57.1% | 100.0% | 72.7% |
+| Held-out | Selected named initiative definition | 10 / 17 / 12 | 58.8% | 83.3% | 69.0% |
+
+The original project description was retained after this experiment because the selected candidate reduced held-out F1. The candidate reduced extra suggestions from nine to seven but missed `Silverline` and `Evergreen`. Both configurations still incorrectly classify `Encoder` and `Decoder` as projects. Clearer descriptions alone produced insufficient generalization in this experiment. The eight-note, all-label evaluation above measures a different dataset and should be interpreted separately.
+
+### Expanded research schema
+
+The next schema experiment kept the original three descriptions and added four categories. A model is a named architecture such as BERT or Transformer. A method is a computational technique such as beam search or dropout. A dataset is a named training or evaluation collection such as ImageNet. A component is an architecture part such as encoder, decoder, or attention head. Component and method mentions can be generic technical concepts, so downstream graph creation still requires review and identity resolution.
+
+`tests/fixtures/entity_schema_evaluation.json` contains 24 fresh synthetic examples with annotations for all seven types, authored before comparing the frozen schemas. Examples include personal notes, research passages, mixed project/research text, repeated names, Unicode, and ambiguous references. The exact-span metrics check labels and offsets together. Shared-label metrics compare person, organization, and project under both configurations. The all-label recall for the core schema also includes the research annotations it cannot emit.
+
+```powershell
+.\.venv\Scripts\python.exe tests/backend/evaluate_entity_schemas.py --output .cache/entity-schema-evaluation-v1.json
+```
+
+The report records the fixture SHA-256, complete schemas, pinned model revision, library version, threshold, window settings, per-label results, and individual extra/missed spans. Every returned citation is resolved against its original extraction. Results from November 16, 2026 follow.
+
+| Metric on 24 examples | Core three types | Expanded seven types |
+| --- | --- | --- |
+| Project exact-span precision | 45.0% | 72.7% |
+| Project exact-span recall | 100.0% | 88.9% |
+| Project false positives | 11 | 3 |
+| Project missed mentions | 0 | 1 |
+| Shared-label F1 | 60.0% | 77.8% |
+
+The expanded schema produced 39 correct exact-span-and-label matches from 47 predictions against 42 annotations, giving 83.0% precision and 92.9% recall across all seven types. All ten component annotations matched. Dataset recall was 50% because SQuAD was twice assigned an organization label. Project errors included extra predictions for BERT and ResNet and an incomplete `Project Snowdrop` name. These small authored examples still need independent annotation review and broader evaluation before automatic graph promotion.
+
+`research-v1` is now the default for both the Python extractor and CLI. Use `--schema core-v1` or pass `labels=CORE_LABELS` for the original configuration. Reports record `label_schema_version`; older reports without that field load as `legacy`. Mention IDs continue to include the complete label configuration, and rebuilding core results preserves the existing identity inputs. If the same exact span receives multiple types, each suggestion and its passage carry an explicit review warning. Every mention retains its source citation and suggested status.
+
+The original eight-note evaluation with the broader default yielded 14 exact matches from 16 predictions against 15 annotations, giving 87.5% precision and 93.3% recall. Remaining errors included the organization label for the fruit word `apple` and inclusion of `Dr.` in a person's name.
+
+The updated paper artifact, `.cache/attention-entities-research-v1.json`, contains 716 suggestions across 93 passages with zero failed passages. All 716 citations were independently resolved against the original extraction. Counts are 204 person, 93 organization, 37 project, 106 model, 153 method, 53 dataset, and 70 component predictions. Four invalid candidates were rejected and 25 passages carry conflicting-type warnings. Exact `encoder`/`decoder` predictions comprise 41 component labels and one model label. Residual project errors include `Softmax` and diagram fragments, so review remains necessary. The paper has no fully annotated entity ground truth and these counts measure output volume.
+
 ## Knowledge graph checkpoint 1 - source passages
 
 `services/source_passages.py` deterministically partitions saved native/OCR region strings into passages for later entity extraction. `schemas/passages.py` defines passage and paginated-response contracts. Each passage has a stable UUID, ordinal, exact text, source SHA-256, native/OCR method, review flags, and a `CitationReference` containing document, extraction run, physical page, region, and character range.
