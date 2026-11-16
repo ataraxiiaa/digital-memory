@@ -1,4 +1,3 @@
-// NOT EXECUTED by the Phase 2 author: ports 3100/3199 were reserved for another agent's run.
 import { test, expect, type Page } from "@playwright/test";
 
 const user = { id: "00000000-0000-0000-0000-000000000001", email: "alex@example.test", role: "authenticated", aud: "authenticated", app_metadata: {}, user_metadata: {}, created_at: "2026-11-13T10:00:00Z" };
@@ -15,6 +14,10 @@ async function signedIn(page: Page) {
   await page.getByLabel("Email address").fill("alex@example.test");
   await page.getByLabel("Password", { exact: true }).fill("fictional-password");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
+}
+
+// Open the view only after routes are mocked: it fetches as soon as it mounts.
+async function openEntities(page: Page) {
   await page.getByRole("button", { name: /Entities/ }).click();
 }
 
@@ -35,6 +38,7 @@ test("entities view lists merge suggestions with reasons and evidence, and merge
     await route.fulfill({ json: { entity: entity(A, "Larry Page", 3), mentions: [], merges: [] } });
   });
 
+  await openEntities(page);
   await expect(page.getByText("Possible merges (1)")).toBeVisible();
   await expect(page.getByText("may be “Larry Page”")).toBeVisible();
   await expect(page.getByText("Larry Page founded Google")).toBeVisible();
@@ -54,6 +58,7 @@ test("ambiguous and weak suggestions are labelled and can be dismissed", async (
     id: "00000000-0000-0000-0000-0000000000b2", kind: "surname", score: 0.4, ambiguous: true,
     reason: "Page is only a surname. Ambiguous: it also fits “Lisa Page”", a: side(A, "Page"), b: side(B, "Larry Page") }] } }));
   await page.route("**/api/entities/suggestions/*/dismiss", route => { dismissed = true; return route.fulfill({ status: 204 }); });
+  await openEntities(page);
   await expect(page.getByText("Ambiguous", { exact: true })).toBeVisible();
   await expect(page.getByText("Surname only (weak) · 40%")).toBeVisible();
   await page.getByRole("button", { name: "Not the same" }).click();
@@ -74,6 +79,7 @@ test("entity detail renames, splits a mention, and undoes a merge", async ({ pag
   await page.route("**/api/entities/mentions/split", route => { calls.push("split"); return route.fulfill({ status: 201, json: { entity: base, mentions: [], merges: [] } }); });
   await page.route("**/api/entities/merges/*/undo", route => { calls.push("undo"); return route.fulfill({ status: 204 }); });
 
+  await openEntities(page);
   await page.getByRole("button", { name: "Larry Page", exact: true }).click();
   await page.getByLabel("Name").fill("Larry E. Page");
   await page.getByRole("button", { name: "Rename", exact: true }).click();
