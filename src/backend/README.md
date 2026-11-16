@@ -102,6 +102,28 @@ The saved Attention-paper results showed that the research labels had nowhere to
 
 On the 93-passage Attention paper (`.cache/attention-entities-full-v1.json`), `full-v1` produced 819 suggestions against 716 for `research-v1`, with zero failed passages, four rejected invalid candidates, and 819 cited spans. The 103 extra suggestions are 101 dates, 16 events, and 1 location, with small movement in other types. The trade-off is real. Many date hits are legitimate bibliography years and conference events, but BLEU scores such as `28.4` and `25.4` are labelled as dates, and `WMT 2014` moved from dataset to date. Use `research-v1` for papers. Use `full-v1` for notes and anything feeding a timeline. These are unreviewed model outputs, not measured accuracy, and no held-out annotation set exists yet for the three new labels.
 
+### Timeline-label evaluation
+
+`tests/fixtures/timeline_labels.json` holds 41 fresh synthetic notes (85 date/event/location annotations among 116 total, plus deliberate negatives) with the annotation policy stored in the file. It was written before any run and the label descriptions were not tuned against it. Exact span and label must both match.
+
+```powershell
+.\.venv\Scripts\python.exe tests/backend/evaluate_timeline_labels.py --output .cache/timeline-label-evaluation-v1.json
+```
+
+Results on November 17, 2026 (pinned model, threshold 0.5):
+
+| Exact-span metric | `research-v1` | `full-v1` |
+| --- | --- | --- |
+| Timeline labels: precision / recall / F1 | no such labels / 0% / 0% | 91.4% / 100% / 95.5% |
+| Date: precision / recall | n/a | 92.7% / 100% (38 of 38) |
+| Event: precision / recall | n/a | 84.0% / 100% (21 of 21) |
+| Location: precision / recall | n/a | 96.3% / 100% (26 of 26) |
+| All other labels: precision / recall / F1 | 47.5% / 90.3% / 62.2% | 65.9% / 87.1% / 75.0% |
+
+There were no boundary-only timeline errors and no failed passages. The eight timeline false positives are mostly cases where the policy and the model disagree: clock times and durations tagged as dates (`7:30 pm`, `3.5 days`, `12 hours`), `7:30 pm show` and bare `Dinner` as events, `Karachi` extracted inside a named festival, and the verb-like events `flight` and `Nothing`. The non-timeline labels improved because dates and places no longer get forced into project or organization. They still show weaknesses: `et al.` is included in person spans, `GLUE` and `ImageNet` are sometimes labelled project or organization, and `WMT 2014 English-German` is truncated.
+
+Interpret this cautiously. The set is small, one author wrote both the policy and the annotations, the sentences are short and clean, and no real-world scan or paper text is included. The 100% recall is a ceiling for easy cases, not an expectation for messy documents. A second annotator and longer, noisier passages should come before relying on these numbers. Reviewing suggestions in the entity panel remains required.
+
 Not yet addressed: bibliography text still produces person, organization, and event noise, and the same entity is not merged across mentions. Identity resolution and relationships are the next stage.
 
 ## Knowledge graph checkpoint 1 - source passages
