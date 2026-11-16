@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 const headers = { "Cache-Control": "no-store" };
 const MAX_MULTIPART_BYTES = 30 * 1024 * 1024 + 64 * 1024;
+const MAX_NOTE_REQUEST_CHARS = 1_500_000;
 
-export async function proxyDocuments(request: NextRequest, path: string, operation: "read" | "upload" | "process" | "entities" | "review" = "read") {
+export async function proxyDocuments(request: NextRequest, path: string, operation: "read" | "upload" | "process" | "entities" | "review" | "create-note" | "prepare-note" = "read") {
+  const note = operation === "create-note";
+  const prepare = operation === "prepare-note";
   const upload = operation === "upload";
   const processing = operation === "process" || operation === "entities";
   const review = operation === "review";
@@ -36,15 +39,18 @@ export async function proxyDocuments(request: NextRequest, path: string, operati
       }));
       upstreamHeaders["Content-Type"] = type;
     }
-    if (review) {
+    if (review || note) {
       const text = await request.text();
-      if (text.length > 1024) return NextResponse.json({ detail: "Invalid review." }, { status: 413, headers });
+      // A note may hold 200,000 characters; allow for JSON escaping of control characters.
+      if (text.length > (note ? MAX_NOTE_REQUEST_CHARS : 1024)) {
+        return NextResponse.json({ detail: note ? "Notes must not exceed 200,000 characters." : "Invalid review." }, { status: 413, headers });
+      }
       body = undefined;
       upstreamHeaders["Content-Type"] = "application/json";
       reviewBody = text;
     }
     const options: RequestInit & { duplex?: "half" } = {
-      method: upload || processing ? "POST" : review ? "PATCH" : "GET", headers: upstreamHeaders,
+      method: upload || processing || note || prepare ? "POST" : review ? "PATCH" : "GET", headers: upstreamHeaders,
       cache: "no-store", redirect: "error",
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(processing ? 300000 : upload ? 120000 : 20000)]),
     };
@@ -62,6 +68,8 @@ export async function proxyDocuments(request: NextRequest, path: string, operati
         detail = typeof error?.detail === "string" ? error.detail : "Check the PDF and form fields, then try again.";
       }
       if (review && response.status === 422) detail = "That review change is not allowed.";
+      if (note) detail = response.status === 401 ? detail : [413, 422].includes(response.status) ? "Check the note: it needs a title and text of at most 200,000 characters." : "Could not save the note. Refresh your documents before trying again.";
+      if (prepare) detail = response.status === 401 || response.status === 404 ? detail : response.status === 422 ? "This note cannot be prepared for entity extraction." : "Could not prepare the note for entity extraction. Try again.";
       if (operation === "entities") detail = response.status === 409 ? "Entity extraction is already active or another document is processing. Try again shortly." : response.status === 401 ? "Your session expired. Please sign in again." : "Could not start entity extraction. Refresh and try again.";
       else if (processing) detail = response.status === 409 ? "Extraction is already active or the processor is busy. Refresh the document status and try again shortly." : response.status === 401 ? "Your session expired. Please sign in again." : "Could not confirm extraction. Refresh the document status before retrying.";
       return NextResponse.json({ detail }, { status: [401, 404, 409, 413, 415, 422].includes(response.status) ? response.status : 503, headers });

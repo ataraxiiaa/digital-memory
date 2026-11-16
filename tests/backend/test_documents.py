@@ -29,7 +29,7 @@ def run_request(handler, operation):
 
 def test_create_sends_user_credentials_and_preserves_long_unicode_text():
     import json
-    content = "Notes — یادداشت\n\n" * 30_000
+    content = "Notes — یادداشت\n\n" * 10_000  # about 170k characters, under the 200k note limit
 
     def handler(request):
         assert request.method == "POST"

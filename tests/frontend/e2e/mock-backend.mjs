@@ -11,6 +11,13 @@ createServer(async (request, response) => {
   if (url.pathname === "/documents" && request.method === "GET") {
     return send(200, [{ ...row, title: `Page offset ${url.searchParams.get("offset")}` }]);
   }
+  if (url.pathname === "/documents" && request.method === "POST") {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    if (!request.headers["content-type"]?.startsWith("application/json")) return send(422, { detail: "Expected JSON" });
+    return send(201, { ...row, title: "Proxy note", received: JSON.parse(Buffer.concat(chunks).toString()) });
+  }
+  if (url.pathname === `/documents/${row.id}/process-text` && request.method === "POST") return send(200, row);
   if (url.pathname === "/documents/upload" && request.method === "POST") {
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);

@@ -7,11 +7,14 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+MAX_NOTE_CHARS = 200_000
+
+
 class NewDocument(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str = Field(min_length=1, max_length=300)
-    content: str = Field(min_length=1)
+    content: str = Field(min_length=1, max_length=MAX_NOTE_CHARS)
     document_date: date | None = None
     collection: str = Field(default="Unfiled", min_length=1, max_length=100)
     synthetic: bool = False
@@ -28,6 +31,10 @@ class NewDocument(BaseModel):
     def require_content(cls, value: str) -> str:
         if not value.strip() or "\x00" in value:
             raise ValueError("Content must be nonblank text without null bytes")
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError:
+            raise ValueError("Content must be valid Unicode text") from None
         return value
 
 

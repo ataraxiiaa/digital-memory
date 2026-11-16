@@ -1,6 +1,10 @@
 import { NextRequest } from "next/server";
 import { proxyDocuments } from "../../../lib/document-proxy";
 
+export async function POST(request: NextRequest) {
+  return proxyDocuments(request, "/documents", "create-note");
+}
+
 export async function GET(request: NextRequest) {
   const params = new URLSearchParams();
   for (const name of ["limit", "offset"]) {
