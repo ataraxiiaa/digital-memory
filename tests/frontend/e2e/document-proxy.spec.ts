@@ -53,3 +53,19 @@ test("processing and extraction proxies preserve authentication and response sta
   expect(report.headers()["cache-control"]).toBe("no-store");
   expect((await report.json()).native_extraction.pages[0].regions[0].text).toBe("Saved budget evidence");
 });
+
+test("entity proxies require credentials, validate identifiers and forward reviews", async ({ request }) => {
+  const base = "/api/documents/00000000-0000-0000-0000-000000000010/entities";
+  expect((await request.get(base)).status()).toBe(401);
+  expect((await request.post(base)).status()).toBe(401);
+  expect((await request.get("/api/documents/not-an-id/entities", { headers })).status()).toBe(404);
+  expect((await request.post(base, { headers })).status()).toBe(202);
+  const listed = await request.get(`${base}?limit=5&status=suggested&evil=1`, { headers });
+  expect(listed.status()).toBe(200);
+  expect((await listed.json()).query).toBe("limit=5&status=suggested");
+  const target = `${base}/00000000-0000-0000-0000-000000000030/00000000-0000-0000-0000-000000000041`;
+  const reviewed = await request.patch(target, { headers, data: { status: "accepted", label: "event" } });
+  expect(reviewed.status()).toBe(200);
+  expect((await reviewed.json()).received).toEqual({ status: "accepted", label: "event" });
+  expect((await request.patch(`${base}/x/y`, { headers, data: {} })).status()).toBe(404);
+});

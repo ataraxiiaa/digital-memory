@@ -2,14 +2,14 @@
 
 ## Knowledge graph checkpoint 2 - local entity suggestions
 
-`services/entity_mentions.py` runs GLiNER2 locally on exact source passages. The default `research-v1` schema covers person, organization, project, model, method, dataset, and component. It uses `fastino/gliner2-base-v1`, pinned to revision `f9634218e53580c56edf0de97ca1a7d3f1c2354e`, and `gliner2==2.1.0`. The optional dependency lock preserves the OCR checkpoint versions. Our installed PyTorch is CPU-only and this checkpoint explicitly uses CPU inference.
+`services/entity_mentions.py` runs GLiNER2 locally on exact source passages. The `research-v1` schema covers person, organization, project, model, method, dataset, and component; `full-v1` (the default) adds date, event, and location. It uses `fastino/gliner2-base-v1`, pinned to revision `f9634218e53580c56edf0de97ca1a7d3f1c2354e`, and `gliner2==2.1.0`. The optional dependency lock preserves the OCR checkpoint versions. Our installed PyTorch is CPU-only and this checkpoint explicitly uses CPU inference.
 
 ```powershell
 uv pip install --python .venv/Scripts/python.exe -r src/backend/requirements-entities.txt
 .\.venv\Scripts\python.exe -m src.backend.services.entity_mentions .cache/attention-ocr-v2.json --output .cache/attention-entities-research-v1.json
 ```
 
-The input is a saved `LayoutReport`, not the paginated passage response. First use downloads model files from Hugging Face; source text stays on the machine. Cached weights support subsequent local inference. Choose a new output filename; existing reports are never overwritten. Results remain local JSON for this learning checkpoint. There is no entity API, database persistence, or frontend review screen yet. Existing ingestion and extraction endpoints remain unchanged.
+The input is a saved `LayoutReport`, not the paginated passage response. First use downloads model files from Hugging Face; source text stays on the machine. Cached weights support subsequent local inference. Choose a new output filename; existing reports are never overwritten. The CLI writes local JSON. The API and review screen described in checkpoint 3 below store and review the same suggestions per user.
 
 GLiNER2 scans overlapping 128-word windows with 32-word overlap and batch size one. Window offsets map back to unchanged passage text. This avoids simply truncating longer passages, although context across passage boundaries remains unavailable. Each candidate must have a supported label, finite score at or above the configurable threshold (default `0.5`), valid character offsets, and text exactly matching both the passage slice and original extraction citation. Invalid candidates are counted and rejected; malformed responses and inference failures are recorded separately from successful empty results. Per-passage status and warnings make partial failures visible. The CLI saves partial reports but exits nonzero if any passage failed.
 
@@ -78,11 +78,31 @@ The report records the fixture SHA-256, complete schemas, pinned model revision,
 
 The expanded schema produced 39 correct exact-span-and-label matches from 47 predictions against 42 annotations, giving 83.0% precision and 92.9% recall across all seven types. All ten component annotations matched. Dataset recall was 50% because SQuAD was twice assigned an organization label. Project errors included extra predictions for BERT and ResNet and an incomplete `Project Snowdrop` name. These small authored examples still need independent annotation review and broader evaluation before automatic graph promotion.
 
-`research-v1` is now the default for both the Python extractor and CLI. Use `--schema core-v1` or pass `labels=CORE_LABELS` for the original configuration. Reports record `label_schema_version`; older reports without that field load as `legacy`. Mention IDs continue to include the complete label configuration, and rebuilding core results preserves the existing identity inputs. If the same exact span receives multiple types, each suggestion and its passage carry an explicit review warning. Every mention retains its source citation and suggested status.
+`full-v1` (see checkpoint 3) is now the default for both the Python extractor and CLI; `research-v1` remains available with `--schema research-v1`. Use `--schema core-v1` or pass `labels=CORE_LABELS` for the original configuration. Reports record `label_schema_version`; older reports without that field load as `legacy`. Mention IDs continue to include the complete label configuration, and rebuilding core results preserves the existing identity inputs. If the same exact span receives multiple types, each suggestion and its passage carry an explicit review warning. Every mention retains its source citation and suggested status.
 
 The original eight-note evaluation with the broader default yielded 14 exact matches from 16 predictions against 15 annotations, giving 87.5% precision and 93.3% recall. Remaining errors included the organization label for the fruit word `apple` and inclusion of `Dr.` in a person's name.
 
 The updated paper artifact, `.cache/attention-entities-research-v1.json`, contains 716 suggestions across 93 passages with zero failed passages. All 716 citations were independently resolved against the original extraction. Counts are 204 person, 93 organization, 37 project, 106 model, 153 method, 53 dataset, and 70 component predictions. Four invalid candidates were rejected and 25 passages carry conflicting-type warnings. Exact `encoder`/`decoder` predictions comprise 41 component labels and one model label. Residual project errors include `Softmax` and diagram fragments, so review remains necessary. The paper has no fully annotated entity ground truth and these counts measure output volume.
+
+## Knowledge graph checkpoint 3 - stored entities and human review
+
+Apply `202611170001_entities.sql` (`python -m src.backend.supabase.migrate`) before using these routes. It adds `entity_runs` (one model pass over one saved extraction) and `entity_mentions` (one row per suggestion, keyed by run and the deterministic mention ID, so re-running never collides). Both tables have row-level security; clients can only `SELECT` their own rows. Writes go through three `security definer` functions that check ownership: `start_entity_run`, `finish_entity_run` (inserts all mentions with the run result atomically), and `review_entity_mention`. A run that stays `processing` for 20 minutes can be superseded. Each mention keeps the exact citation, score, warnings, and source hash. A reviewer's decision is stored beside the model's label: `review_status` (`suggested`, `accepted`, `rejected`) and an optional `reviewed_label`, and the original `label` is never overwritten.
+
+| Route | Purpose |
+| --- | --- |
+| `POST /documents/{id}/entities?schema=full-v1` | Start a background run on the saved extraction (`core-v1`, `research-v1`, or `full-v1`). Shares the single worker slot with PDF processing. |
+| `GET /documents/{id}/entities?status=&label=&min_score=&limit=&offset=` | Latest run, whole-run review counts, and a filtered page of mentions in reading order. |
+| `PATCH /documents/{id}/entities/{run_id}/{mention_id}` | Body `{"status": "accepted"\|"rejected"\|"suggested", "label": optional corrected type}`. A corrected type is only allowed when accepting. |
+
+The workspace's document dialog now shows an **Entities** panel for processed documents: choose a type set, find entities, filter by status and type, accept, reject, undo, accept under a different type, and open the exact surrounding source text with the span highlighted.
+
+### Schema expansion
+
+The saved Attention-paper results showed that the research labels had nowhere to put several kinds of text that a timeline needs, so the model forced them into wrong labels (for example `Q3 budget review` as a project and `We` as a person). `full-v1` adds three types: `date`, `event`, and `location`. Authored timeline sentences were corrected as expected (`3 March 2024`, `September 15`, `next Friday` as dates; `Q3 budget review` and `kickoff conference` as events; `Lahore`, `Islamabad`, `Berlin` as locations).
+
+On the 93-passage Attention paper (`.cache/attention-entities-full-v1.json`), `full-v1` produced 819 suggestions against 716 for `research-v1`, with zero failed passages, four rejected invalid candidates, and 819 cited spans. The 103 extra suggestions are 101 dates, 16 events, and 1 location, with small movement in other types. The trade-off is real. Many date hits are legitimate bibliography years and conference events, but BLEU scores such as `28.4` and `25.4` are labelled as dates, and `WMT 2014` moved from dataset to date. Use `research-v1` for papers. Use `full-v1` for notes and anything feeding a timeline. These are unreviewed model outputs, not measured accuracy, and no held-out annotation set exists yet for the three new labels.
+
+Not yet addressed: bibliography text still produces person, organization, and event noise, and the same entity is not merged across mentions. Identity resolution and relationships are the next stage.
 
 ## Knowledge graph checkpoint 1 - source passages
 

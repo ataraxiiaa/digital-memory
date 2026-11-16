@@ -25,6 +25,13 @@ createServer(async (request, response) => {
   if (url.pathname === `/documents/${row.id}/process` && request.method === "POST") {
     return send(202, { ...row, status: "processing", processing_run_id: "00000000-0000-0000-0000-000000000020" });
   }
+  if (url.pathname === `/documents/${row.id}/entities` && request.method === "POST") return send(202, { id: "00000000-0000-0000-0000-000000000030", status: "processing" });
+  if (url.pathname === `/documents/${row.id}/entities` && request.method === "GET") return send(200, { query: url.searchParams.toString(), mentions: [] });
+  if (url.pathname.startsWith(`/documents/${row.id}/entities/`) && request.method === "PATCH") {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    return send(200, { received: JSON.parse(Buffer.concat(chunks).toString()), contentType: request.headers["content-type"] });
+  }
   if (url.pathname === `/documents/${row.id}/extraction`) {
     return send(200, { native_extraction: { pages: [{ page_number: 1, warnings: [], regions: [{ text: "Saved budget evidence" }] }] }, pages: [], tables: [], warnings: [], ocr_extraction: null });
   }

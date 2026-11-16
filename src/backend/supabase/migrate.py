@@ -71,6 +71,18 @@ def verify_documents(connection) -> None:
     """).fetchone()
     if extraction != (True,) or permissions != (True, False, False, False, True, False, True, False):
         raise ValueError("Extraction ownership or function permissions failed verification")
+    entity = connection.execute("""
+        select (select relrowsecurity from pg_class where oid = 'public.entity_runs'::regclass),
+               (select relrowsecurity from pg_class where oid = 'public.entity_mentions'::regclass),
+               has_table_privilege('authenticated', 'public.entity_mentions', 'SELECT'),
+               has_table_privilege('authenticated', 'public.entity_mentions', 'INSERT'),
+               has_table_privilege('authenticated', 'public.entity_mentions', 'UPDATE'),
+               has_table_privilege('anon', 'public.entity_mentions', 'SELECT'),
+               has_function_privilege('authenticated', 'public.review_entity_mention(uuid,uuid,text,text)', 'EXECUTE'),
+               has_function_privilege('anon', 'public.review_entity_mention(uuid,uuid,text,text)', 'EXECUTE')
+    """).fetchone()
+    if entity != (True, True, True, False, False, False, True, False):
+        raise ValueError("Entity ownership or review permissions failed verification")
 
 
 def apply_migrations(connection) -> list[str]:

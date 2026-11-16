@@ -36,7 +36,7 @@ uv pip install --python .venv/Scripts/python.exe -r src/backend/requirements-ocr
 .\.venv\Scripts\python.exe -m uvicorn backend.main:app --app-dir src --reload --host 127.0.0.1 --port 8000
 ```
 
-The worker runs in the API process. Keep the backend running during extraction. Interrupted attempts can be retried after 20 minutes. Exact source passages are available through the authenticated API. Local entity-mention extraction is the next experimental checkpoint; see the backend README for its CLI and evaluation commands. Entity review/storage, relationship extraction, search, and timeline construction follow.
+The worker runs in the API process. Keep the backend running during extraction. Interrupted attempts can be retried after 20 minutes. Exact source passages are available through the authenticated API. Entity suggestions (people, organizations, projects, research terms, dates, events, locations) can be run per document, saved privately, and reviewed in the workspace; see the backend README for the API, migration, and evaluation commands. Relationship extraction, identity merging, search, and timeline construction follow.
 
 Checkpoint 1 provides `GET /health` and interactive API documentation. Supabase PostgreSQL storage has an applied migration, verified catalog permissions, and authenticated document create/list/read endpoints. Live two-user isolation checks remain pending. See [backend instructions and the five-step roadmap](src/backend/README.md) for API examples and the remaining ingestion, search, and frontend work. SQLite is not used.
 

@@ -25,8 +25,14 @@ RESEARCH_LABELS = {
     "dataset": "A named dataset or benchmark collection used for training or evaluation, such as ImageNet or WMT 2014",
     "component": "A technical part of a model architecture, such as encoder, decoder, embedding layer, or attention head",
 }
-LABEL_SCHEMAS = {"core-v1": CORE_LABELS, "research-v1": RESEARCH_LABELS}
-DEFAULT_LABEL_SCHEMA = "research-v1"
+TIMELINE_LABELS = {
+    "date": "A specific date, month, year, or time period, such as 3 March 2024 or summer 2019",
+    "event": "A named or scheduled event, such as a meeting, conference, workshop, launch, or review",
+    "location": "A named place, such as a city, country, office, or venue",
+}
+FULL_LABELS = {**RESEARCH_LABELS, **TIMELINE_LABELS}
+LABEL_SCHEMAS = {"core-v1": CORE_LABELS, "research-v1": RESEARCH_LABELS, "full-v1": FULL_LABELS}
+DEFAULT_LABEL_SCHEMA = "full-v1"
 LABELS = LABEL_SCHEMAS[DEFAULT_LABEL_SCHEMA]
 CHUNK_SIZE = 128
 CHUNK_OVERLAP = 32
@@ -50,9 +56,9 @@ def extract_entity_mentions(report: LayoutReport, model, *, threshold: float = .
     if isinstance(threshold, bool) or not math.isfinite(threshold) or not 0 <= threshold <= 1:
         raise ValueError("threshold must be finite and between zero and one")
     labels = dict(LABELS if labels is None else labels)
-    if (not set(CORE_LABELS).issubset(labels) or not set(labels).issubset(RESEARCH_LABELS)
+    if (not set(CORE_LABELS).issubset(labels) or not set(labels).issubset(FULL_LABELS)
             or any(not isinstance(value, str) or not value.strip() for value in labels.values())):
-        raise ValueError("Provide core label descriptions and supported optional research labels")
+        raise ValueError("Provide core label descriptions and supported optional labels")
     schema_version = next((name for name, schema in LABEL_SCHEMAS.items() if labels == schema), "custom")
     passages, _ = build_source_passages(report)
     runs = {report.native_extraction.id: report.native_extraction}

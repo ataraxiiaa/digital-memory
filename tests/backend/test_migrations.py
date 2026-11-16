@@ -16,6 +16,14 @@ def test_rejects_missing_wrappers(sql):
         transaction_body(sql)
 
 
+def test_entity_migration_is_wrapped_and_private_by_default():
+    body = transaction_body((MIGRATIONS / "202611170001_entities.sql").read_text(encoding="utf-8"))
+    assert body.count("enable row level security") == 2
+    assert "grant select on public.entity_mentions to authenticated" in body
+    assert "grant insert" not in body and "grant update" not in body
+    assert body.count("security definer set search_path = ''") == 3
+
+
 def test_existing_migration_can_be_wrapped_for_atomic_tracking():
     body = transaction_body((MIGRATIONS / "202611130001_documents.sql").read_text(encoding="utf-8"))
     assert "create table public.documents" in body

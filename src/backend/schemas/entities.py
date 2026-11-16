@@ -10,6 +10,7 @@ from .extraction import CitationReference, ExtractionRecord
 
 EntityLabel = Literal[
     "person", "organization", "project", "model", "method", "dataset", "component",
+    "date", "event", "location",
 ]
 
 
@@ -48,7 +49,7 @@ class EntityReport(ExtractionRecord):
     ocr_extraction_id: UUID | None = None
     source_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     algorithm_version: Literal["entity-mentions-v1"] = "entity-mentions-v1"
-    label_schema_version: Literal["legacy", "core-v1", "research-v1", "custom"] = "legacy"
+    label_schema_version: Literal["legacy", "core-v1", "research-v1", "full-v1", "custom"] = "legacy"
     model_repository: str
     model_revision: str
     library_version: str

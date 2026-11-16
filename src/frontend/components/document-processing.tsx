@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "./auth-provider";
+import { EntityReview } from "./entity-review";
 import { documentStatusLabel, type DocumentDetail } from "../lib/documents";
 
 type ExtractedPage = { page_number: number; warnings: string[]; regions: { text: string }[] };
@@ -104,7 +105,7 @@ export function DocumentProcessing({ document, onUpdate }: {
     ...report.tables.filter(table => table.page_number === page.page_number).flatMap(table => table.warnings),
   ])] : [];
 
-  return <section className="processing-panel" aria-label="Document extraction">
+  return <><section className="processing-panel" aria-label="Document extraction">
     <div className="processing-heading"><h3>Extraction</h3><span className="upload-state" data-status={document.status}>{documentStatusLabel[document.status]}</span></div>
     {document.status === "uploaded" && <p>Your PDF is stored. Extract it to read its text and identify tables.</p>}
     {(running || document.status === "processing") && <p role="status">Extraction may take a few minutes. You can close this view and refresh the document status later.</p>}
@@ -123,5 +124,7 @@ export function DocumentProcessing({ document, onUpdate }: {
       <h4>PDF text</h4><div className="document-content">{page.regions.map(region => region.text).join("\n\n") || "No native text on this page."}</div>
       {(ocrPage?.regions.length ?? 0) > 0 && <><h4>Recognized image text</h4><div className="document-content">{ocrPage?.regions.map(region => region.text).join("\n\n")}</div></>}
     </div>}
-  </section>;
+  </section>
+  {(document.status === "ready" || document.status === "needs_review") && <EntityReview document={document} />}
+  </>;
 }

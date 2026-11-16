@@ -346,3 +346,65 @@ test("failed extraction refreshes the persisted failure and offers retry", async
   await expect(page.getByRole("dialog").getByText("Failed", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry extraction", exact: true })).toBeEnabled();
 });
+
+test("entity review accepts, retypes, rejects and shows exact source evidence", async ({ page }) => {
+  await mockAuth(page);
+  const row = { ...documentRow, status: "ready", original_filename: "notes.pdf", page_count: 1,
+    file_size_bytes: pdfFixture().length, content: "", processing_run_id: "00000000-0000-0000-0000-000000000020",
+    processing_started_at: null };
+  const runId = "00000000-0000-0000-0000-000000000030";
+  const citation = (start: number, end: number) => ({ document_id: row.id, extraction_id: "e1", page_number: 1, region_id: "r1", start_char: start, end_char: end });
+  type Item = { id: string; run_id: string; page_number: number; label: string; text: string; score: number; citation: ReturnType<typeof citation>; warnings: string[]; review_status: string; reviewed_label: string | null };
+  const mentions: Item[] = [
+    { id: "00000000-0000-0000-0000-000000000041", text: "Sara", label: "person", score: 0.97, start: 0, end: 4 },
+    { id: "00000000-0000-0000-0000-000000000042", text: "Project Atlas", label: "project", score: 0.8, start: 14, end: 27 },
+    { id: "00000000-0000-0000-0000-000000000043", text: "3 March 2024", label: "date", score: 0.99, start: 31, end: 43 },
+  ].map(item => ({ id: item.id, run_id: runId, page_number: 1, label: item.label, text: item.text, score: item.score,
+    citation: citation(item.start, item.end), warnings: item.label === "project" ? ["Source passage requires review"] : [],
+    review_status: "suggested", reviewed_label: null }));
+  const reviews: unknown[] = [];
+  await page.route("**/api/documents?*", route => route.fulfill({ json: [row] }));
+  await page.route(`**/api/documents/${row.id}`, route => route.fulfill({ json: row }));
+  await page.route(`**/api/documents/${row.id}/extraction`, route => route.fulfill({ json: {
+    native_extraction: { id: "e1", pages: [{ page_number: 1, warnings: [], regions: [{ id: "r1", text: "Sara approved Project Atlas on 3 March 2024." }] }] },
+    ocr_extraction: null, pages: [], tables: [], warnings: [] } }));
+  await page.route(`**/api/documents/${row.id}/entities?*`, route => {
+    const query = new URL(route.request().url()).searchParams;
+    const status = query.get("status");
+    const shown = mentions.filter(item => !status || item.review_status === status);
+    const count = (name: string) => mentions.filter(item => item.review_status === name).length;
+    return route.fulfill({ json: { run: { id: runId, status: "completed", label_schema_version: "full-v1", threshold: 0.5, failed_passage_count: 0, rejected_candidate_count: 0, error: null },
+      counts: { total: 3, suggested: count("suggested"), accepted: count("accepted"), rejected: count("rejected"), by_label: { person: 1, project: 1, date: 1 } },
+      total: shown.length, offset: 0, limit: 25, mentions: shown } });
+  });
+  await page.route(`**/api/documents/${row.id}/entities/${runId}/*`, async route => {
+    expect(route.request().method()).toBe("PATCH");
+    const body = route.request().postDataJSON();
+    reviews.push(body);
+    const item = mentions.find(candidate => route.request().url().endsWith(candidate.id))!;
+    item.review_status = body.status; item.reviewed_label = body.label;
+    await route.fulfill({ json: item });
+  });
+  await page.goto("/sign-in"); await signIn(page);
+  await page.getByRole("button", { name: /Project notes.*Work/ }).click();
+  const panel = page.getByRole("dialog").getByLabel("Entity review");
+  await expect(panel.getByText("3 suggested · 0 accepted · 0 rejected · 3 awaiting review")).toBeVisible();
+  await expect(panel.getByText("Source passage requires review")).toBeVisible();
+
+  await panel.locator(".entity-item", { hasText: "Sara" }).getByRole("button", { name: "Accept", exact: true }).click();
+  await expect(panel.locator(".entity-item")).toHaveCount(2);
+  await panel.locator(".entity-item", { hasText: "Project Atlas" }).getByLabel(/Accept “Project Atlas” as another type/).selectOption("event");
+  await expect(panel.locator(".entity-item")).toHaveCount(1);
+  await panel.locator(".entity-item", { hasText: "3 March 2024" }).getByRole("button", { name: "Show source" }).click();
+  await expect(panel.locator(".entity-source mark")).toHaveText("3 March 2024");
+  await panel.locator(".entity-item", { hasText: "3 March 2024" }).getByRole("button", { name: "Reject" }).click();
+  await expect(panel.getByText("No suggestions match these filters.")).toBeVisible();
+  expect(reviews).toEqual([{ status: "accepted", label: null }, { status: "accepted", label: "event" }, { status: "rejected", label: null }]);
+
+  await panel.getByLabel("Show").selectOption("accepted");
+  await expect(panel.locator(".entity-item")).toHaveCount(2);
+  await expect(panel.getByText("model said project")).toBeVisible();
+  await page.screenshot({ path: "test-results/entity-review.png", fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.getByRole("dialog").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+});
