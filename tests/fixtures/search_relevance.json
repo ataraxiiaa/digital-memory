@@ -1,0 +1,49 @@
+{
+  "policy": "Authored before the search implementation existed. Each document page becomes one passage. A query counts as a hit when at least one expected (doc, page) is in the top 3 results; 'absent' lists passages that must not appear at all; 'none' queries must return nothing and must not error. English stemming is expected to bridge run/running, bake/baking and lentil/lentils; there is no synonym or semantic matching, so no query here relies on one.",
+  "documents": [
+    {"key": "budget", "title": "Q3 budget notes", "pages": [
+      "The finance team approved the budget for Project Marigold on 12 June. The total allocation is 40,000 dollars for marketing and travel.",
+      "Travel expenses must be submitted within thirty days. Receipts are required for every flight and hotel booking.",
+      "Marketing spend focuses on conference sponsorships and printed brochures."]},
+    {"key": "trip", "title": "Lisbon trip", "pages": [
+      "We landed in Lisbon on Friday evening and took a tram to the hotel near Alfama.",
+      "On Saturday we visited the castle and ate grilled sardines at a small restaurant.",
+      "The flight home was delayed by two hours because of fog."]},
+    {"key": "paper", "title": "Attention paper notes", "pages": [
+      "The Transformer architecture relies entirely on self-attention mechanisms, dispensing with recurrence and convolutions.",
+      "Multi-head attention allows the model to jointly attend to information from different representation subspaces.",
+      "Training used the Adam optimizer with warmup steps and dropout regularization on the WMT 2014 English-German dataset."]},
+    {"key": "meeting", "title": "Meeting minutes", "pages": [
+      "Nadia chaired the quarterly planning workshop. Attendees agreed to move the kickoff meeting to next week.",
+      "Action items: Omar will draft the proposal; Hira will book the venue in Karachi."]},
+    {"key": "health", "title": "Health diary", "pages": [
+      "Started running three times a week and noticed better sleep. Doctor recommended more water and fewer late dinners.",
+      "Blood pressure readings were normal at the clinic checkup in March."]},
+    {"key": "recipes", "title": "Recipes", "pages": [
+      "Combine flour, butter and sugar, then bake the biscuits for twelve minutes until golden.",
+      "For the lentil soup, simmer onions, garlic, carrots and red lentils with cumin for thirty minutes."]}
+  ],
+  "queries": [
+    {"q": "budget Marigold", "expect": [["budget", 1]]},
+    {"q": "travel receipts", "expect": [["budget", 2]]},
+    {"q": "flight delayed fog", "expect": [["trip", 3]]},
+    {"q": "sardines restaurant", "expect": [["trip", 2]]},
+    {"q": "castle", "expect": [["trip", 2]]},
+    {"q": "self attention recurrence", "expect": [["paper", 1]]},
+    {"q": "multi-head attention subspaces", "expect": [["paper", 2]]},
+    {"q": "Adam optimizer dropout", "expect": [["paper", 3]]},
+    {"q": "WMT English-German", "expect": [["paper", 3]]},
+    {"q": "kickoff meeting next week", "expect": [["meeting", 1]]},
+    {"q": "who will book the venue", "expect": [["meeting", 2]]},
+    {"q": "running sleep", "expect": [["health", 1]]},
+    {"q": "blood pressure checkup", "expect": [["health", 2]]},
+    {"q": "baking biscuits", "expect": [["recipes", 1]]},
+    {"q": "lentils soup cumin", "expect": [["recipes", 2]]},
+    {"q": "conference sponsorship", "expect": [["budget", 3]]},
+    {"q": "\"jointly attend\"", "expect": [["paper", 2]]},
+    {"q": "travel -receipts", "expect": [["budget", 1]], "absent": [["budget", 2]]},
+    {"q": "quantum chromodynamics", "none": true},
+    {"q": "the and of", "none": true},
+    {"q": "'; drop table documents; --", "none": true}
+  ]
+}

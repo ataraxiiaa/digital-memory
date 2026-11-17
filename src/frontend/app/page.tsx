@@ -9,9 +9,10 @@ import { DocumentLibrary } from "../components/document-library";
 
 import { EntityLibrary } from "../components/entity-library";
 import { TimelineView } from "../components/timeline-view";
+import { SearchView } from "../components/search-view";
 
-const views = ["Overview", "Documents", "Entities", "Timeline"] as const;
-const viewIcons = { Overview: "O", Documents: "F", Entities: "E", Timeline: "D" } as const;
+const views = ["Overview", "Documents", "Search", "Entities", "Timeline"] as const;
+const viewIcons = { Overview: "O", Documents: "F", Search: "S", Entities: "E", Timeline: "D" } as const;
 
 export default function Home() {
   return <AuthGate><Workspace /></AuthGate>;
@@ -19,6 +20,7 @@ export default function Home() {
 
 function Workspace() {
   const [view, setView] = useState<(typeof views)[number]>("Overview");
+  const [openDocumentId, setOpenDocumentId] = useState<string | null>(null);
   const { user } = useAuth();
   return <div className="app-shell">
     <aside className="sidebar">
@@ -29,8 +31,8 @@ function Workspace() {
       <div className="sidebar-footer"><span className="demo-dot" />Your own collection<p>A place for the documents you choose to add.</p></div>
     </aside>
     <div className="main-shell"><header className="topbar"><span>Workspace <span className="slash">/</span><strong>{view}</strong></span><AccountMenu /></header>
-      <main><div className="page-heading"><div><p className="eyebrow">YOUR PERSONAL KNOWLEDGE SPACE</p><h1>{view === "Overview" ? "Make room for remembering." : view === "Documents" ? "Your library, in one place." : view === "Entities" ? "The people and things you remember." : "One moment leads to another."}</h1><p className="subtitle">A fresh space for your notes, ideas, and moments.</p></div></div>
-        {view === "Entities" ? <EntityLibrary /> : view === "Timeline" ? <TimelineView /> : <DocumentLibrary />}
+      <main><div className="page-heading"><div><p className="eyebrow">YOUR PERSONAL KNOWLEDGE SPACE</p><h1>{view === "Overview" ? "Make room for remembering." : view === "Documents" ? "Your library, in one place." : view === "Search" ? "Find the exact words." : view === "Entities" ? "The people and things you remember." : "One moment leads to another."}</h1><p className="subtitle">A fresh space for your notes, ideas, and moments.</p></div></div>
+        {view === "Search" ? <SearchView onOpenDocument={id => { setOpenDocumentId(id); setView("Documents"); }} /> : view === "Entities" ? <EntityLibrary /> : view === "Timeline" ? <TimelineView /> : <DocumentLibrary openDocumentId={openDocumentId} onOpened={() => setOpenDocumentId(null)} />}
         <footer className="main-footer"><span>Every memory starts with a source.</span><span>Your workspace</span></footer>
       </main>
     </div>

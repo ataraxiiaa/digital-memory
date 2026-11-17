@@ -16,7 +16,7 @@ function displayDate(value: string) {
   return new Intl.DateTimeFormat("en", { year: "numeric", month: "short", day: "numeric" }).format(new Date(value));
 }
 
-export function DocumentLibrary() {
+export function DocumentLibrary({ openDocumentId, onOpened }: { openDocumentId?: string | null; onOpened?: () => void } = {}) {
   const { session, signOut } = useAuth();
   const token = session?.access_token;
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
@@ -134,6 +134,9 @@ export function DocumentLibrary() {
     xhr.onabort = () => fail("Upload interrupted. Refresh your documents before retrying.");
     xhr.send(data);
   }
+
+  // Another view (search) can ask the library to open one of its documents.
+  useEffect(() => { if (openDocumentId && token) { void openDocument(openDocumentId); onOpened?.(); } }, [openDocumentId, token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function openDocument(id: string) {
     detailRequest.current?.abort();

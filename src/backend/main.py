@@ -11,6 +11,7 @@ from backend.routes.text_notes import router as text_notes_router
 from backend.routes.entity_graph import router as entity_graph_router
 from backend.routes.processing import router as processing_router
 from backend.routes.timeline import router as timeline_router
+from backend.routes.search import router as search_router
 from backend.storage.documents import StorageUnavailable
 
 
@@ -27,6 +28,7 @@ app.include_router(entities_router)
 app.include_router(text_notes_router)
 app.include_router(entity_graph_router)
 app.include_router(timeline_router)
+app.include_router(search_router)
 
 
 @app.middleware("http")
