@@ -42,6 +42,9 @@ createServer(async (request, response) => {
   if (url.pathname === `/documents/${row.id}/extraction`) {
     return send(200, { native_extraction: { pages: [{ page_number: 1, warnings: [], regions: [{ text: "Saved budget evidence" }] }] }, pages: [], tables: [], warnings: [], ocr_extraction: null });
   }
+  if (url.pathname === "/search" && request.method === "GET") return send(200, { query: url.searchParams.toString(), results: [] });
+  if (url.pathname === "/search/status" && request.method === "GET") return send(200, { documents: [], current: 0, stale: 0, missing: 0, not_ready: 0 });
+  if ((url.pathname === "/search/index" || url.pathname === `/documents/${row.id}/search-index`) && request.method === "POST") return send(200, { documents: 1, passages: 2, skipped: 0 });
   if (url.pathname === `/documents/${row.id}`) return send(200, row);
   return send(404, { detail: "Not found" });
 }).listen(3199, "127.0.0.1");
