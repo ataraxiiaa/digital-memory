@@ -98,6 +98,20 @@ def verify_documents(connection) -> None:
         """).fetchone()
         if identity != (4, True, False, False, False, True, False, False):
             raise ValueError("Entity identity ownership or function permissions failed verification")
+    if connection.execute("select to_regclass('public.timeline_items')").fetchone()[0] is not None:
+        timeline = connection.execute("""
+            select (select relrowsecurity from pg_class where oid = 'public.timeline_items'::regclass),
+                   has_table_privilege('authenticated', 'public.timeline_items', 'SELECT'),
+                   has_table_privilege('authenticated', 'public.timeline_items', 'INSERT'),
+                   has_table_privilege('authenticated', 'public.timeline_items', 'UPDATE'),
+                   has_table_privilege('anon', 'public.timeline_items', 'SELECT'),
+                   has_function_privilege('authenticated', 'public.replace_timeline_items(uuid,jsonb)', 'EXECUTE'),
+                   has_function_privilege('anon', 'public.replace_timeline_items(uuid,jsonb)', 'EXECUTE'),
+                   has_function_privilege('authenticated', 'public.review_timeline_item(uuid,text,text,date,date,text)', 'EXECUTE'),
+                   has_function_privilege('anon', 'public.review_timeline_item(uuid,text,text,date,date,text)', 'EXECUTE')
+        """).fetchone()
+        if timeline != (True, True, False, False, False, True, False, True, False):
+            raise ValueError("Timeline ownership or function permissions failed verification")
 
 
 def apply_migrations(connection) -> list[str]:

@@ -1,0 +1,28 @@
+{
+  "policy": "Authored before the pairing service was written, from the 41 notes in timeline_labels.json (note = 1-based index). The truth is what a careful reader would say. The service sees the gold mentions as if a person had accepted them, so this measures pairing only, not extraction. Anchor 2026-11-18. known_gap marks truths the sentence-level design is expected to miss; the test asserts those are the only misses, so a fix must update this file.",
+  "anchor": "2026-11-18",
+  "cases": [
+    {"note": 1, "items": [{"event": "budget review", "dates": ["12 June 2025"], "status": "resolved", "locations": ["Karachi"], "participants": []}]},
+    {"note": 2, "items": [{"event": "supplier summit", "dates": ["Monday"], "status": "ambiguous", "locations": ["Istanbul"], "participants": ["Hira"]}]},
+    {"note": 4, "items": [{"event": "quarterly planning workshop", "dates": ["4 to 6 November"], "status": "resolved", "locations": [], "participants": []}]},
+    {"note": 5, "items": [{"event": "wedding", "dates": ["21 December"], "status": "resolved", "locations": ["Murree"], "participants": ["Omar"]}]},
+    {"note": 8, "items": [{"event": "annual general meeting", "dates": ["8 January"], "status": "resolved", "locations": ["Serena Hotel Islamabad"], "participants": ["Imran Qureshi"]}]},
+    {"note": 9, "items": [{"event": "kickoff meeting", "dates": ["yesterday"], "status": "resolved", "locations": [], "participants": []}]},
+    {"note": 10, "items": [{"event": "central bank meeting", "dates": [], "status": "none", "locations": ["Frankfurt"], "participants": []}]},
+    {"note": 13, "items": [{"event": "conference on machine learning", "dates": ["July 2026"], "status": "resolved", "locations": ["Vienna"], "participants": []}]},
+    {"note": 15, "items": [{"event": "product launch", "dates": [], "status": "none", "locations": ["Lahore Fort", "Dubai"], "participants": ["Farah", "Usman"]}]},
+    {"note": 16, "items": [{"event": "Eid dinner", "dates": ["next week"], "status": "resolved", "locations": [], "participants": []}]},
+    {"note": 18, "items": [{"event": "board meeting", "dates": [], "status": "none", "locations": [], "participants": [], "known_gap": "A date elsewhere in the sentence is not this event's date."}]},
+    {"note": 20, "items": [{"event": "NeurIPS 2017", "dates": [], "status": "none", "locations": ["Long Beach"], "participants": []}]},
+    {"note": 22, "items": [{"event": "retrospective", "dates": ["Friday afternoon"], "status": "ambiguous", "locations": [], "participants": ["Project Orion"]}]},
+    {"note": 25, "items": [{"event": "board retreat", "dates": ["January"], "status": "resolved", "locations": ["Murree"], "participants": []}]},
+    {"note": 27, "items": [{"event": "Karachi Literature Festival", "dates": ["last year"], "status": "resolved", "locations": [], "participants": ["Zubair"]}]},
+    {"note": 33, "items": [{"event": "press conference", "dates": ["16 October"], "status": "resolved", "locations": [], "participants": []}]},
+    {"note": 37, "items": [{"event": "summer school", "dates": ["1 July", "12 July 2026"], "status": "resolved", "locations": ["Lisbon"], "participants": [], "known_gap": "The range is joined by 'starts ... and ends', not 'to'."}]},
+    {"note": 38, "items": [{"event": "sprint planning", "dates": ["5th of May"], "status": "resolved", "locations": ["Peshawar"], "participants": []}]},
+    {"note": 40, "items": [{"event": "Birthday party", "dates": ["14 February"], "status": "resolved", "locations": ["Café Aylanto"], "participants": ["Hania"]}]},
+    {"note": 41, "items": [
+      {"event": "review meeting", "dates": [], "status": "none", "locations": [], "participants": []},
+      {"event": "review meeting", "dates": ["Wednesday"], "status": "ambiguous", "locations": [], "participants": []}]}
+  ]
+}

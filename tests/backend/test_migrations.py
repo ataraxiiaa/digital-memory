@@ -38,3 +38,13 @@ def test_existing_migration_can_be_wrapped_for_atomic_tracking():
     body = transaction_body((MIGRATIONS / "202611130001_documents.sql").read_text(encoding="utf-8"))
     assert "create table public.documents" in body
     assert "enable row level security" in body
+
+
+def test_timeline_migration_is_wrapped_private_and_owner_checked():
+    body = transaction_body((MIGRATIONS / "202611180003_timeline.sql").read_text(encoding="utf-8"))
+    assert body.count("enable row level security") == 1
+    assert "grant select on public.timeline_items to authenticated" in body
+    assert "grant insert" not in body and "grant update" not in body
+    assert body.count("security definer set search_path = ''") == 2
+    # Cited mentions must be accepted and owned by the caller.
+    assert "m.review_status = 'accepted'" in body and "m.owner_id = auth.uid()" in body

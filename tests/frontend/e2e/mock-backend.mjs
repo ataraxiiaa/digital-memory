@@ -39,6 +39,16 @@ createServer(async (request, response) => {
     for await (const chunk of request) chunks.push(chunk);
     return send(200, { received: JSON.parse(Buffer.concat(chunks).toString()), contentType: request.headers["content-type"] });
   }
+  if (url.pathname === "/timeline" && request.method === "GET") {
+    // Echo only the filters that reached the backend, in order.
+    return send(200, { query: url.searchParams.toString(), items: [] });
+  }
+  if (url.pathname === "/timeline/build" && request.method === "POST") return send(200, { documents: 1, items: 0, undated: 0, unattached_dates: 0 });
+  if (url.pathname.startsWith("/timeline/") && request.method === "PATCH") {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    return send(200, { received: JSON.parse(Buffer.concat(chunks).toString()) });
+  }
   if (url.pathname === `/documents/${row.id}/extraction`) {
     return send(200, { native_extraction: { pages: [{ page_number: 1, warnings: [], regions: [{ text: "Saved budget evidence" }] }] }, pages: [], tables: [], warnings: [], ocr_extraction: null });
   }
